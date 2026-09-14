@@ -1,0 +1,10 @@
+[gd_resource type="StandardMaterial3D" format=3 uid="uid://ck5o04nlff80n"]
+
+[resource]
+resource_name = "M_Ground"
+cull_mode = 2
+albedo_color = Color(0.5408801, 0.5442964, 0.124695055, 1)
+metallic_specular = 0.26
+roughness = 0.5
+proximity_fade_distance = 0.01
+stencil_flags = 2

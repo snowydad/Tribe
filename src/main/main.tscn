@@ -1,0 +1,62 @@
+[gd_scene format=3 uid="uid://cguc2rs0e3gap"]
+
+[ext_resource type="PackedScene" uid="uid://bjv2811k7cn3h" path="res://assets/models/terrain.tscn" id="1_3s6yk"]
+[ext_resource type="Script" uid="uid://bjrpcpy3a0rda" path="res://src/main/main.gd" id="1_ab7mr"]
+[ext_resource type="PackedScene" uid="uid://cdh370sbee1wm" path="res://src/characters/character.tscn" id="2_ab7mr"]
+[ext_resource type="Script" uid="uid://221kfc7owpk" path="res://src/main/PlayerInputManager.gd" id="2_jkpqq"]
+[ext_resource type="Script" uid="uid://d28827n4sjcwa" path="res://src/main/camera_3d.gd" id="3_djufw"]
+
+[sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_frqgp"]
+
+[sub_resource type="Sky" id="Sky_jqarl"]
+sky_material = SubResource("ProceduralSkyMaterial_frqgp")
+
+[sub_resource type="Environment" id="Environment_jkpqq"]
+background_mode = 2
+sky = SubResource("Sky_jqarl")
+ambient_light_source = 3
+ambient_light_color = Color(0.24705882, 0.42352942, 1, 1)
+tonemap_mode = 2
+
+[sub_resource type="SphereShape3D" id="SphereShape3D_j07er"]
+radius = 0.2
+
+[node name="Main" type="Node3D" unique_id=1651533966]
+script = ExtResource("1_ab7mr")
+
+[node name="PlayerInputManager" type="Node3D" parent="." unique_id=1055998725 node_paths=PackedStringArray("camera")]
+script = ExtResource("2_jkpqq")
+camera = NodePath("../CameraAnchor/SpringArm3D/Camera3D")
+
+[node name="Terrain" parent="." unique_id=609251900 instance=ExtResource("1_3s6yk")]
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=695704487]
+environment = SubResource("Environment_jkpqq")
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=2056928374]
+transform = Transform3D(0.70710677, -0.49999997, 0.49999997, 0, 0.70710677, 0.70710677, -0.70710677, -0.49999997, 0.49999997, 0, 25.053116, 16.011642)
+shadow_enabled = true
+directional_shadow_pancake_size = 100.0
+
+[node name="CameraAnchor" type="Node3D" parent="." unique_id=1779606153]
+transform = Transform3D(1, 0, 0, 0, 0.7071068, 0.7071068, 0, -0.7071068, 0.7071068, 0, 15, 15)
+script = ExtResource("3_djufw")
+
+[node name="SpringArm3D" type="SpringArm3D" parent="CameraAnchor" unique_id=1569430973]
+shape = SubResource("SphereShape3D_j07er")
+spring_length = 15.0
+margin = 0.2
+
+[node name="Camera3D" type="Camera3D" parent="CameraAnchor/SpringArm3D" unique_id=260273288]
+fov = 60.0
+
+[node name="Character" parent="." unique_id=682575563 instance=ExtResource("2_ab7mr")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 10.691006, 0)
+
+[node name="CSGBox3D" type="CSGBox3D" parent="." unique_id=1420518224]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 8.737544, 3.8581338)
+size = Vector3(2, 2, 2)
+
+[node name="CSGSphere3D" type="CSGSphere3D" parent="." unique_id=714643722]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 9.820326, 10.277142, 12.682752)
+radius = 1.0

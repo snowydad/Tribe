@@ -1,0 +1,65 @@
+[gd_scene format=3 uid="uid://cdh370sbee1wm"]
+
+[ext_resource type="Script" uid="uid://jyrct3qoouub" path="res://src/characters/character.gd" id="1_5iv74"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_j07er"]
+size = Vector3(0.6, 1.5, 0.3)
+
+[sub_resource type="SphereMesh" id="SphereMesh_j07er"]
+radius = 0.15
+height = 0.3
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_djufw"]
+margin = 0.4
+radius = 0.38134766
+height = 1.5893555
+
+[sub_resource type="SystemFont" id="SystemFont_o43y5"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_5iv74"]
+diffuse_mode = 3
+disable_fog = true
+albedo_color = Color(0, 0.5668416, 0.11610565, 1)
+emission_enabled = true
+emission = Color(0, 0.83, 0, 1)
+emission_energy_multiplier = 16.0
+
+[sub_resource type="TorusMesh" id="TorusMesh_j07er"]
+inner_radius = 0.8
+
+[node name="Character" type="CharacterBody3D" unique_id=682575563]
+script = ExtResource("1_5iv74")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="." unique_id=1434398887]
+mesh = SubResource("BoxMesh_j07er")
+
+[node name="Face" type="MeshInstance3D" parent="." unique_id=1902912857]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.6333522, -0.24765149)
+mesh = SubResource("SphereMesh_j07er")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=1401391871]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.0015716553, 0.023803711, -0.0017089844)
+shape = SubResource("CapsuleShape3D_djufw")
+
+[node name="NavigationAgent3D" type="NavigationAgent3D" parent="." unique_id=473793849]
+height = 1.5
+
+[node name="DevLabel" type="Label3D" parent="." unique_id=1966805573]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
+billboard = 1
+no_depth_test = true
+alpha_cut = 2
+modulate = Color(0.74699646, 0.0003067854, 0.71575105, 1)
+outline_modulate = Color(0, 0, 0, 0)
+font = SubResource("SystemFont_o43y5")
+font_size = 48
+outline_size = 8
+horizontal_alignment = 0
+vertical_alignment = 2
+
+[node name="SelectionRing" type="MeshInstance3D" parent="." unique_id=1411028485]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.7633203, 0)
+visible = false
+material_override = SubResource("StandardMaterial3D_5iv74")
+cast_shadow = 0
+mesh = SubResource("TorusMesh_j07er")
