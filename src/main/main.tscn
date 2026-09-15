@@ -5,6 +5,8 @@
 [ext_resource type="PackedScene" uid="uid://cdh370sbee1wm" path="res://src/characters/character.tscn" id="2_ab7mr"]
 [ext_resource type="Script" uid="uid://221kfc7owpk" path="res://src/main/PlayerInputManager.gd" id="2_jkpqq"]
 [ext_resource type="Script" uid="uid://d28827n4sjcwa" path="res://src/main/camera_3d.gd" id="3_djufw"]
+[ext_resource type="Material" uid="uid://ci6tdoqvoe6o0" path="res://assets/materials/M_CameraTarget.tres" id="5_jqarl"]
+[ext_resource type="Material" uid="uid://ck5o04nlff80n" path="res://assets/models/M_Ground.tres" id="7_30cu5"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_frqgp"]
 
@@ -18,8 +20,16 @@ ambient_light_source = 3
 ambient_light_color = Color(0.24705882, 0.42352942, 1, 1)
 tonemap_mode = 2
 
-[sub_resource type="SphereShape3D" id="SphereShape3D_j07er"]
-radius = 0.2
+[sub_resource type="SphereShape3D" id="SphereShape3D_jqarl"]
+
+[sub_resource type="SphereMesh" id="SphereMesh_csncc"]
+radius = 0.25
+height = 0.5
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_j07er"]
+top_radius = 8.0
+bottom_radius = 10.0
+height = 10.0
 
 [node name="Main" type="Node3D" unique_id=1651533966]
 script = ExtResource("1_ab7mr")
@@ -39,16 +49,25 @@ shadow_enabled = true
 directional_shadow_pancake_size = 100.0
 
 [node name="CameraAnchor" type="Node3D" parent="." unique_id=1779606153]
-transform = Transform3D(1, 0, 0, 0, 0.7071068, 0.7071068, 0, -0.7071068, 0.7071068, 0, 15, 15)
+transform = Transform3D(1, 0, 0, 0, 0.99999994, 0, 0, 0, 0.99999994, 0, 0, 0)
 script = ExtResource("3_djufw")
+anchor_height_offset = 1.5
+bounds_min = Vector2(-90, -90)
+bounds_max = Vector2(90, 90)
 
 [node name="SpringArm3D" type="SpringArm3D" parent="CameraAnchor" unique_id=1569430973]
-shape = SubResource("SphereShape3D_j07er")
+shape = SubResource("SphereShape3D_jqarl")
 spring_length = 15.0
 margin = 0.2
 
 [node name="Camera3D" type="Camera3D" parent="CameraAnchor/SpringArm3D" unique_id=260273288]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 14.899951)
 fov = 45.0
+
+[node name="CameraTarget" type="MeshInstance3D" parent="CameraAnchor" unique_id=1220761795]
+transform = Transform3D(1, 0, 0, 0, 0.69437253, 0.7196156, 0, -0.7196156, 0.69437253, 0, 0.004198551, 0.034011826)
+material_override = ExtResource("5_jqarl")
+mesh = SubResource("SphereMesh_csncc")
 
 [node name="Character" parent="." unique_id=682575563 instance=ExtResource("2_ab7mr")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.620082, 0)
@@ -58,5 +77,15 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.56042194, 3.8581338)
 size = Vector3(2, 2, 2)
 
 [node name="CSGSphere3D" type="CSGSphere3D" parent="." unique_id=714643722]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 9.820326, 1.3312626, 12.682752)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.28200722, 2.3462727, 16.016521)
 radius = 1.0
+
+[node name="Island" type="MeshInstance3D" parent="." unique_id=1500141399]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -70.50647, -4.0107117, 69.45219)
+material_override = ExtResource("7_30cu5")
+mesh = SubResource("CylinderMesh_j07er")
+
+[node name="Island2" type="MeshInstance3D" parent="." unique_id=800087782]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 69.73374, -4.0107117, -72.38322)
+material_override = ExtResource("7_30cu5")
+mesh = SubResource("CylinderMesh_j07er")

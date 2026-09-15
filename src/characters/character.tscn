@@ -28,6 +28,7 @@ emission_energy_multiplier = 16.0
 inner_radius = 0.8
 
 [node name="Character" type="CharacterBody3D" unique_id=682575563]
+collision_layer = 2
 script = ExtResource("1_5iv74")
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="." unique_id=1434398887]
