@@ -1,0 +1,18 @@
+[gd_resource type="NoiseTexture2D" format=3 uid="uid://siyn4ljkqcga"]
+
+[sub_resource type="FastNoiseLite" id="FastNoiseLite_iiywn"]
+frequency = 0.05
+fractal_type = 3
+fractal_octaves = 1
+fractal_lacunarity = 1.0
+fractal_ping_pong_strength = 1.0
+domain_warp_fractal_type = 0
+domain_warp_fractal_lacunarity = 5.0
+
+[resource]
+height = 2048
+noise = SubResource("FastNoiseLite_iiywn")
+seamless = true
+invert = true
+as_normal_map = true
+bump_strength = 4.0

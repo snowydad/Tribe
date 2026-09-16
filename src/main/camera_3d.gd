@@ -1,91 +1,45 @@
 # ==============================================================================
-# CAMERA_3D.GD — RTS / Colony Sim Контроллер Камеры (Godot 4)
+# ФАЙЛ: src/main/camera_3d.gd
+# НАЗНАЧЕНИЕ: RTS-камера с подстройкой высоты над рельефом, инерцией и резинкой
 # ==============================================================================
-# 
-# СТРУКТУРА УЗЛОВ В СЦЕНЕ:
-#   CameraAnchor (Node3D)          <-- [Этот скрипт висит здесь] Позиция (X, Z), наклон и слежение за Y рельефа
-#    └── SpringArm3D               <-- Отвечает за зум (Length) и защищает от проникания сквозь террейн
-#         └── Camera3D             <-- Сам узел камеры (линза), направлен строго в CameraAnchor
-#
-# КЛЮЧЕВЫЕ МЕХАНИКИ:
-# 1. 3D-Drag (Захват рельефа):
-#    При клике ЛКМ запрашивается точка на ландшафте (или на sea_level). 
-#    Камера смещается так, чтобы точка оставалась под курсором.
-#
-# 2. Авто-слежение за рельефом (_adjust_height_to_terrain):
-#    Пускает луч вниз по маске terrain_collision_mask (игнорируя персонажей) 
-#    и удерживает узел на высоте anchor_height_offset над землей (не опускаясь ниже sea_level).
-#
-# 3. Динамический Зум и Наклон (Pitch):
-#    Изменение длины SpringArm3D плавно пересчитывает угол наклона (lerp).
-#
-# 4. Инерция и Упругие границы (Rubber Banding):
-#    Плавный докат при броске и экспоненциальное сопротивление у краёв острова.
-# ==============================================================================
-
+# v 2026.09.16
 extends Node3D
 
-# --- НАСТРОЙКИ ЗУМА И НАКЛОНА ---
 @export_group("Zoom & Pitch Settings")
-## Скорость приближения/отдаления при прокрутке колесика
 @export var zoom_speed: float = 1.0
-
-## Минимальная длина SpringArm3D (максимальный зум к земле)
 @export var min_zoom: float = 3.0
-
-## Максимальная длина SpringArm3D (максимальный зум вверх)
 @export var max_zoom: float = 25.0
-
-## Угол наклона (в градусах) при максимальном приближении (почти горизонт)
 @export var pitch_at_min_zoom: float = -20.0
-
-## Угол наклона (в градусах) при максимальном отдалении (вид сверху)
 @export var pitch_at_max_zoom: float = -60.0
 
-
-# --- НАСТРОЙКИ ДРАГА И РЕЛЬЕФА ---
-@export_group("Drag & Surface")
-## Высота плоскости моря (минимальный уровень Y = 0.0)
-@export var sea_level: float = 0.0
-
-## Высота удерживания якоря над поверхностью земли (в метрах)
-@export var anchor_height_offset: float = 3.0
-
-## Маска физики для террейна (Layer 1 = World), чтобы игнорировать персов
-@export_flags_3d_physics var terrain_collision_mask: int = 1
-
-
-# --- ОГРАНИЧЕНИЯ И РЕЗИНОВЫЕ ГРАНИЦЫ ---
-@export_group("Limits & Rubber Banding")
-## Минимальная граница перемещения [X_min, Z_min]
-@export var bounds_min: Vector2 = Vector2(-50.0, -50.0)
-
-## Максимальная граница перемещения [X_max, Z_max]
-@export var bounds_max: Vector2 = Vector2(50.0, 50.0)
-
-## Максимальный запас вытягивания камеры за границы (в метрах)
-@export var rubber_band_margin: float = 10.0
-
-## Скорость возвратной пружины при отпускании ЛКМ за границей
-@export var return_speed: float = 12.0
-
-
-# --- НАСТРОЙКИ ИНЕРЦИИ ---
-@export_group("Inertia")
-## Сила торможения инерции (чем больше значение, тем короче тормозной путь)
+@export_group("Movement & Surface")
+@export var pan_speed: float = 1.0
 @export var friction: float = 15.0
 
+## Базовый уровень поверхности / моря
+@export var sea_level: float = 2.0
 
-# --- ССЫЛКИ НА УЗЛЫ ---
+## Высота точки фокуса (якоря) над землей (например, 1.5 м — уровень головы персонажа)
+@export var height_offset: float = 1.5
+
+## Скорость плавности огибания высоты рельефа
+@export var height_smooth_speed: float = 10.0
+
+@export_group("Rubber Band Bounds")
+@export var bounds_min: Vector2 = Vector2(-50.0, -50.0)
+@export var bounds_max: Vector2 = Vector2(50.0, 50.0)
+@export var rubber_band_margin: float = 10.0
+@export var return_speed: float = 12.0
+
 @onready var spring_arm: SpringArm3D = $SpringArm3D
 @onready var camera: Camera3D = $SpringArm3D/Camera3D
 
-# --- ВНУТРЕННИЕ ПЕРЕМЕННЫЕ ---
+## Флаг блокировки ввода камеры во время работы с персонажем
 var is_locked: bool = false:
 	set(value):
 		is_locked = value
 		if is_locked:
-			force_reset_drag()
+			cancel_drag()
 
 var _is_dragging: bool = false
 var _drag_plane: Plane
@@ -94,24 +48,16 @@ var _pan_velocity: Vector3 = Vector3.ZERO
 
 func _ready() -> void:
 	_update_zoom_and_pitch()
+	_snap_to_terrain_height(1.0)
 
-func _process(delta: float) -> void:
-	# 1. Постоянно удерживаем якорь над рельефом (игнорируя персов и не тоня в воде)
-	_adjust_height_to_terrain()
+## Сброс состояния драга и инерции
+func cancel_drag() -> void:
+	_is_dragging = false
+	_drag_start_world_pos = Vector3.ZERO
+	_pan_velocity = Vector3.ZERO
 
-	if is_locked:
-		return
-
-	# 2. Отработка возврата от границ и инерции скольжения
-	if not _is_dragging:
-		if _is_position_out_of_bounds(global_position):
-			var clamped_pos = _get_clamped_position(global_position)
-			global_position = global_position.lerp(clamped_pos, return_speed * delta)
-			_pan_velocity = Vector3.ZERO
-		elif _pan_velocity.length_squared() > 0.001:
-			var target_pos = global_position + _pan_velocity * delta
-			global_position = _apply_rubber_band_to_position(target_pos)
-			_pan_velocity = _pan_velocity.lerp(Vector3.ZERO, friction * delta)
+func force_reset_drag() -> void:
+	cancel_drag()
 
 func _unhandled_input(event: InputEvent) -> void:
 	if is_locked:
@@ -126,50 +72,85 @@ func _unhandled_input(event: InputEvent) -> void:
 			if event.pressed:
 				_start_drag(event.position)
 			else:
-				cancel_drag()
+				_stop_drag()
 
 	elif event is InputEventMouseMotion and _is_dragging:
 		var current_world_pos = _get_ground_position(event.position)
 		if current_world_pos != Vector3.ZERO:
-			var delta_pos = _drag_start_world_pos - current_world_pos
-			var target_pos = global_position + delta_pos
+			var delta = _drag_start_world_pos - current_world_pos
+			var target_pos = global_position + Vector3(delta.x, 0, delta.z)
 			
 			global_position = _apply_rubber_band_to_position(target_pos)
-			_pan_velocity = delta_pos / get_process_delta_time()
+			_pan_velocity = Vector3(delta.x, 0, delta.z) / get_process_delta_time()
 
-## Подгоняет высоту Y якоря под рельеф острова (игнорирует персов и не тонет ниже sea_level)
-func _adjust_height_to_terrain() -> void:
+func _process(delta: float) -> void:
+	# Подстраиваем высоту Y над рельефом ТОЛЬКО когда НЕ тащим карту мышкой
+	if not _is_dragging:
+		_snap_to_terrain_height(delta * height_smooth_speed)
+
+	if is_locked or _is_dragging:
+		return
+
+	if _is_position_out_of_bounds(global_position):
+		var clamped_pos = _get_clamped_position(global_position)
+		global_position = global_position.lerp(clamped_pos, return_speed * delta)
+		_pan_velocity = Vector3.ZERO
+	elif _pan_velocity.length_squared() > 0.001:
+		var target_pos = global_position + _pan_velocity * delta
+		global_position = _apply_rubber_band_to_position(target_pos)
+		_pan_velocity = _pan_velocity.lerp(Vector3.ZERO, friction * delta)
+
+## Подстройка Y-координаты якоря под высоту рельефа + смещение height_offset (слой 1)
+func _snap_to_terrain_height(weight: float) -> void:
 	var space_state = get_world_3d().direct_space_state
-	var ray_from = Vector3(global_position.x, 100.0, global_position.z)
-	var ray_to = Vector3(global_position.x, -50.0, global_position.z)
+	var ray_origin = Vector3(global_position.x, 200.0, global_position.z)
+	var ray_end = Vector3(global_position.x, -50.0, global_position.z)
 	
-	var query = PhysicsRayQueryParameters3D.create(ray_from, ray_to)
-	query.collision_mask = terrain_collision_mask
+	var query = PhysicsRayQueryParameters3D.create(ray_origin, ray_end)
+	query.collision_mask = 1 # Проверяем ТОЛЬКО террейн (слой 1)
+	
+	var result = space_state.intersect_ray(query)
+	var target_y: float = sea_level + height_offset
+	
+	if result:
+		target_y = max(result.position.y + height_offset, sea_level + height_offset)
+		
+	global_position.y = lerp(global_position.y, target_y, clamp(weight, 0.0, 1.0))
+
+## Захват 3D-точки на рельефе (collision_mask = 1)
+func _start_drag(mouse_pos: Vector2) -> void:
+	if not camera or is_locked:
+		return
+		
+	var ray_origin = camera.project_ray_origin(mouse_pos)
+	var ray_dir = camera.project_ray_normal(mouse_pos)
+	var ray_end = ray_origin + ray_dir * 1000.0
+	
+	var space_state = get_world_3d().direct_space_state
+	var query = PhysicsRayQueryParameters3D.create(ray_origin, ray_end)
+	query.collision_mask = 1 # Игнорируем персонажей и объекты на слое 2
 	
 	var result = space_state.intersect_ray(query)
 	
-	var ground_y: float = sea_level
 	if result:
-		ground_y = maxf(result.position.y, sea_level)
-		
-	var target_y = ground_y + anchor_height_offset
-	global_position.y = lerp(global_position.y, target_y, 0.15)
-
-func _start_drag(mouse_pos: Vector2) -> void:
-	_drag_plane = Plane(Vector3.UP, global_position.y)
-	var hit_pos = _get_ground_position(mouse_pos)
-	if hit_pos != Vector3.ZERO:
 		_is_dragging = true
-		_drag_start_world_pos = hit_pos
-		_pan_velocity = Vector3.ZERO
+		_drag_start_world_pos = result.position
+		_drag_plane = Plane(Vector3.UP, result.position.y)
+	else:
+		var sea_plane = Plane(Vector3.UP, sea_level)
+		var sea_hit = sea_plane.intersects_ray(ray_origin, ray_dir)
+		if sea_hit:
+			_is_dragging = true
+			_drag_start_world_pos = sea_hit
+			_drag_plane = sea_plane
+		else:
+			_is_dragging = false
+			
+	_pan_velocity = Vector3.ZERO
 
-func cancel_drag() -> void:
+func _stop_drag() -> void:
 	_is_dragging = false
 	_drag_start_world_pos = Vector3.ZERO
-
-func force_reset_drag() -> void:
-	cancel_drag()
-	_pan_velocity = Vector3.ZERO
 
 func _get_ground_position(mouse_pos: Vector2) -> Vector3:
 	if not camera:

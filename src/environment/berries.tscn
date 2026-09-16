@@ -7,6 +7,9 @@
 
 [sub_resource type="SphereShape3D" id="SphereShape3D_j07er"]
 
+[sub_resource type="SphereShape3D" id="SphereShape3D_csncc"]
+radius = 2.0
+
 [node name="Berries" type="Node3D" unique_id=891666075]
 script = ExtResource("1_cyyvj")
 
@@ -15,10 +18,31 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5126747, 0)
 material_override = ExtResource("1_sllsq")
 mesh = SubResource("SphereMesh_j07er")
 
-[node name="Area3D" type="Area3D" parent="." unique_id=666937668]
+[node name="StaticBody" type="StaticBody3D" parent="." unique_id=1710396481]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5126747, 0)
+collision_layer = 2
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="Area3D" unique_id=294814304]
+[node name="CollisionShape3D" type="CollisionShape3D" parent="StaticBody" unique_id=294814304]
 shape = SubResource("SphereShape3D_j07er")
 
+[node name="InteractiveArea" type="Area3D" parent="." unique_id=1675810085]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="InteractiveArea" unique_id=68786511]
+shape = SubResource("SphereShape3D_csncc")
+
+[node name="WorkPoint" type="Node3D" parent="." unique_id=612981014]
+
+[node name="Marker3D_N" type="Marker3D" parent="WorkPoint" unique_id=1683398182]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -1)
+
+[node name="Marker3D_S" type="Marker3D" parent="WorkPoint" unique_id=1134585259]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1)
+
+[node name="Marker3D_E" type="Marker3D" parent="WorkPoint" unique_id=169460280]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0)
+
+[node name="Marker3D_W" type="Marker3D" parent="WorkPoint" unique_id=685941968]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1, 0, 0)
+
 [node name="DevLabel" type="Label3D" parent="." unique_id=1660290718]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.2409896, 0)
