@@ -1,12 +1,17 @@
 # ==============================================================================
 # ФАЙЛ: src/main/PlayerInputManager.gd
-# НАЗНАЧЕНИЕ: Мгновенный подхват любого персонажа + полная изоляция ввода от камеры
+# НАЗНАЧЕНИЕ: Захват любого персонажа без предварительного выбора + плавный подъем
 # ==============================================================================
 extends Node3D
 
+@export_group("Drag & Drop Settings")
 @export var camera: Camera3D
-@export var drag_threshold: float = 10.0 # Порог сдвига мыши для подхвата (в пикселях)
-@export var drag_height_offset: float = 2.0 # Высота парения юнита в воздухе
+## Порог сдвига мыши для старта перетаскивания (в пикселях)
+@export var drag_threshold: float = 10.0
+## Высота парения юнита в воздухе при перетаскивании
+@export var drag_height_offset: float = 2.0
+## Скорость/плавность подхвата и следования за курсором
+@export var pickup_speed: float = 12.0
 
 var selected_character: CharacterBody3D = null
 var is_dragging_character: bool = false
@@ -16,9 +21,9 @@ var _is_pressing: bool = false
 var _pressed_character: CharacterBody3D = null
 var _drag_xz_offset: Vector3 = Vector3.ZERO
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	if is_dragging_character and selected_character:
-		_update_drag_position()
+		_update_drag_position(delta)
 
 func _input(event: InputEvent) -> void:
 	if not (event is InputEventMouseButton or event is InputEventMouseMotion):
@@ -34,11 +39,10 @@ func _input(event: InputEvent) -> void:
 		_click_start_pos = event.position
 		_is_pressing = true
 		
-		# Сканируем: есть ли персонаж прямо под курсором
+		# Сканируем: есть ли персонаж прямо под курсором (даже если он не был выбран)
 		_pressed_character = _get_character_at_pos(event.position)
 		
 		if _pressed_character:
-			# Мгновенно блокируем карту и поглощаем событие, чтобы она ДАЖЕ НЕ НАЧИНАЛА двигаться!
 			_lock_camera()
 			get_viewport().set_input_as_handled()
 
@@ -46,7 +50,7 @@ func _input(event: InputEvent) -> void:
 	elif event is InputEventMouseMotion and _is_pressing:
 		var move_dist = event.position.distance_to(_click_start_pos)
 		
-		# Если тыкнули в персонажа и потянули дальше порога — МГНОВЕННО ПОДХВАТЫВАЕМ
+		# Если потянули за персонажа дальше порога — МГНОВЕННО ПОДХВАТЫВАЕМ
 		if _pressed_character and not is_dragging_character and move_dist > drag_threshold:
 			if selected_character and selected_character != _pressed_character:
 				selected_character.set_selected(false)
@@ -139,7 +143,7 @@ func _calculate_drag_offset(mouse_pos: Vector2) -> void:
 	var ray_dir = camera.project_ray_normal(mouse_pos)
 	
 	var space_state = get_world_3d().direct_space_state
-	var query = PhysicsRayQueryParameters3D.create(ray_origin, ray_dir * 1000.0)
+	var query = PhysicsRayQueryParameters3D.create(ray_origin, ray_origin + ray_dir * 1000.0)
 	query.exclude = [selected_character.get_rid()]
 	query.collision_mask = 0xFFFFFFFF
 	
@@ -151,7 +155,7 @@ func _calculate_drag_offset(mouse_pos: Vector2) -> void:
 	else:
 		_drag_xz_offset = Vector3.ZERO
 
-func _update_drag_position() -> void:
+func _update_drag_position(delta: float) -> void:
 	if not camera or not selected_character:
 		return
 		
@@ -167,10 +171,16 @@ func _update_drag_position() -> void:
 	var result = space_state.intersect_ray(query)
 	if result:
 		var terrain_point = result.position
-		selected_character.global_position = Vector3(
+		var target_pos = Vector3(
 			terrain_point.x + _drag_xz_offset.x,
 			terrain_point.y + drag_height_offset,
 			terrain_point.z + _drag_xz_offset.z
+		)
+		
+		# Плавная интерполяция к целевой позиции над землей
+		selected_character.global_position = selected_character.global_position.lerp(
+			target_pos,
+			clamp(delta * pickup_speed, 0.0, 1.0)
 		)
 
 func _get_character_at_pos(mouse_position: Vector2) -> CharacterBody3D:
