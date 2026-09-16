@@ -1,7 +1,12 @@
 [gd_resource type="StandardMaterial3D" format=3 uid="uid://m253fhpxo7bn"]
 
 [sub_resource type="FastNoiseLite" id="FastNoiseLite_iiywn"]
-frequency = 0.02
+frequency = 0.05
+fractal_type = 2
+fractal_octaves = 1
+fractal_ping_pong_strength = 5.0
+domain_warp_fractal_type = 0
+domain_warp_fractal_lacunarity = 5.0
 
 [sub_resource type="NoiseTexture2D" id="NoiseTexture2D_ucpde"]
 width = 1024
@@ -12,6 +17,14 @@ as_normal_map = true
 bump_strength = 4.0
 
 [sub_resource type="NoiseTexture2D" id="NoiseTexture2D_iiywn"]
+
+[sub_resource type="FastNoiseLite" id="FastNoiseLite_8f076"]
+noise_type = 0
+fractal_type = 2
+fractal_octaves = 2
+
+[sub_resource type="NoiseTexture2D" id="NoiseTexture2D_fshcv"]
+noise = SubResource("FastNoiseLite_8f076")
 
 [resource]
 resource_name = "M_Sea"
@@ -28,6 +41,7 @@ clearcoat_roughness = 0.3
 anisotropy = 0.59
 refraction_enabled = true
 refraction_scale = 0.01
+refraction_texture = SubResource("NoiseTexture2D_fshcv")
 grow_amount = -0.1
 stencil_flags = 2
 stencil_color = Color(0.12156863, 0.69803923, 0.7764706, 0.41568628)

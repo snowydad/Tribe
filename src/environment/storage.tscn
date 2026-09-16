@@ -1,0 +1,25 @@
+[gd_scene format=3 uid="uid://24t67vidpa66"]
+
+[ext_resource type="Script" uid="uid://d1jiiem7j4lyi" path="res://src/environment/storage.gd" id="1_fpbs4"]
+[ext_resource type="Material" uid="uid://hhnt00hd31k4" path="res://assets/materials/M_Storage.tres" id="2_gvi7j"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_csncc"]
+size = Vector3(2, 1, 2)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_p1a4l"]
+size = Vector3(2.0256348, 1, 2.0424805)
+
+[node name="Storage" type="Node3D" unique_id=731626688]
+script = ExtResource("1_fpbs4")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="." unique_id=2007996094]
+material_override = ExtResource("2_gvi7j")
+mesh = SubResource("BoxMesh_csncc")
+
+[node name="Area3D" type="Area3D" parent="." unique_id=264455655]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Area3D" unique_id=242124298]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.005493164, 0, -0.0061035156)
+shape = SubResource("BoxShape3D_p1a4l")
+
+[node name="Label3D" type="Label3D" parent="Area3D" unique_id=407215896]

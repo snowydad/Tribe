@@ -49,6 +49,9 @@ func _ready() -> void:
 	if not data:
 		data = CharacterData.new()
 		data.generate_identity()
+		
+		speed = ConfigLoader.get_value("base_stats", "move_speed", 5.0)
+	
 	
 	if TimeManager:
 		TimeManager.year_passed.connect(_on_year_passed)

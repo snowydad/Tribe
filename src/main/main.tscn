@@ -1,12 +1,14 @@
 [gd_scene format=3 uid="uid://cguc2rs0e3gap"]
 
-[ext_resource type="PackedScene" uid="uid://bjv2811k7cn3h" path="res://assets/models/terrain.tscn" id="1_3s6yk"]
+[ext_resource type="PackedScene" uid="uid://bjv2811k7cn3h" path="res://src/environment/terrain.tscn" id="1_3s6yk"]
 [ext_resource type="Script" uid="uid://bjrpcpy3a0rda" path="res://src/main/main.gd" id="1_ab7mr"]
 [ext_resource type="PackedScene" uid="uid://cdh370sbee1wm" path="res://src/characters/character.tscn" id="2_ab7mr"]
 [ext_resource type="Script" uid="uid://221kfc7owpk" path="res://src/main/PlayerInputManager.gd" id="2_jkpqq"]
 [ext_resource type="Script" uid="uid://d28827n4sjcwa" path="res://src/main/camera_3d.gd" id="3_djufw"]
 [ext_resource type="Material" uid="uid://ci6tdoqvoe6o0" path="res://assets/materials/M_CameraTarget.tres" id="5_jqarl"]
-[ext_resource type="Material" uid="uid://ck5o04nlff80n" path="res://assets/models/M_Ground.tres" id="7_30cu5"]
+[ext_resource type="Material" uid="uid://ck5o04nlff80n" path="res://assets/materials/M_Ground.tres" id="7_30cu5"]
+[ext_resource type="PackedScene" uid="uid://24t67vidpa66" path="res://src/environment/storage.tscn" id="8_frqgp"]
+[ext_resource type="PackedScene" uid="uid://cxbpv8trxi8g7" path="res://src/environment/berries.tscn" id="9_2nke2"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_frqgp"]
 
@@ -77,7 +79,7 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.56042194, 3.8581338)
 size = Vector3(2, 2, 2)
 
 [node name="CSGSphere3D" type="CSGSphere3D" parent="." unique_id=714643722]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.28200722, 2.3462727, 16.016521)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7.717993, 2.3462727, 16.016521)
 radius = 1.0
 
 [node name="Island" type="MeshInstance3D" parent="." unique_id=1500141399]
@@ -89,3 +91,9 @@ mesh = SubResource("CylinderMesh_j07er")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 69.73374, -4.0107117, -72.38322)
 material_override = ExtResource("7_30cu5")
 mesh = SubResource("CylinderMesh_j07er")
+
+[node name="Storage" parent="." unique_id=731626688 instance=ExtResource("8_frqgp")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 14)
+
+[node name="Berries" parent="." unique_id=891666075 instance=ExtResource("9_2nke2")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.39073, 1.3461447, 16.559986)
