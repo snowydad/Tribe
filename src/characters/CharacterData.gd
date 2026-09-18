@@ -1,6 +1,6 @@
 # ==============================================================================
 # ФАЙЛ: src/characters/CharacterData.gd
-# НАЗНАЧЕНИЕ: Ресурс хранения данных, характеристик и логики нужд персонажа
+# НАЗНАЧЕНИЕ: Ресурс хранения данных, характеристик и инвентаря персонажа
 # ==============================================================================
 class_name CharacterData
 extends Resource
@@ -20,6 +20,12 @@ enum Gender { MALE, FEMALE }
 @export var health: float = 100.0   # 100.0 = здоров, 0.0 = смерть
 @export var hunger: float = 0.0     # 0.0 = сыт, 100.0 = умирает от голода
 @export var energy: float = 100.0   # 100.0 = бодр, 0.0 = вымотан
+
+# ------------------------------------------------------------------------------
+# ИНВЕНТАРЬ / ПЕРЕНОСИМЫЕ ПРЕДМЕТЫ
+# ------------------------------------------------------------------------------
+@export var carried_item: String = "" # Название предмета (например "berry")
+@export var item_amount: int = 0      # Количество
 
 # Сигналы для системы UI и событий
 signal data_changed
@@ -48,7 +54,6 @@ func generate_identity() -> void:
 	
 	age = randi_range(min_age, max_age)
 	
-	# Подписываемся на события времени от TimeManager
 	if TimeManager:
 		if not TimeManager.year_passed.is_connected(_on_year_passed):
 			TimeManager.year_passed.connect(_on_year_passed)
@@ -61,19 +66,15 @@ func _on_year_passed(_total_years: int) -> void:
 	if health <= 0.0:
 		return
 
-	# 1. Прибавка к возрасту
 	age += 1
 	
-	# 2. Рост голода и падение энергии за прожитый год
 	hunger = clamp(hunger + 25.0, 0.0, 100.0)
 	energy = clamp(energy - 15.0, 0.0, 100.0)
 	
-	# 3. Штраф здоровью, если персонаж сильно голодает (hunger > 75)
 	if hunger >= 100.0:
 		health = clamp(health - 35.0, 0.0, 100.0)
 		print("[CharacterData] ", character_name, " is starving! Health: ", health)
 	
-	# 4. Проверка смерти от старости (после 60 лет)
 	if age > 60:
 		var old_age_death_chance = (age - 60) * 0.05
 		if randf() < old_age_death_chance:
@@ -81,7 +82,6 @@ func _on_year_passed(_total_years: int) -> void:
 			print("[CharacterData] ", character_name, " died of old age at ", age)
 			character_died.emit("old_age")
 
-	# 5. Проверка смерти от голода
 	if health <= 0.0:
 		print("[CharacterData] ", character_name, " died!")
 		character_died.emit("starvation_or_disease")

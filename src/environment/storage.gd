@@ -9,7 +9,7 @@ extends Node3D
 	"berry": 0
 }
 
-@onready var dev_label: Label3D = $DevLabel
+@onready var dev_label: Label3D = get_node_or_null("DevLabel")
 @onready var work_points_container: Node3D = $WorkPoints
 
 var _occupied_points: Dictionary = {}
@@ -64,5 +64,5 @@ func _update_dev_ui() -> void:
 		return
 	var text_info = "STORAGE\nTotal Food: %d\n" % get_total_food_count()
 	for type_name in stored_resources:
-		text_info += "%s: %d\n" % [type_name.capitalized(), stored_resources[type_name]]
+		text_info += "%s: %d\n" % [type_name.capitalize(), stored_resources[type_name]]
 	dev_label.text = text_info

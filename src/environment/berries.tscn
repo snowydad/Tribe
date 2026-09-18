@@ -5,10 +5,14 @@
 
 [sub_resource type="SphereMesh" id="SphereMesh_j07er"]
 
-[sub_resource type="SphereShape3D" id="SphereShape3D_j07er"]
+[sub_resource type="SphereShape3D" id="SphereShape3D_ew0m4"]
 
 [sub_resource type="SphereShape3D" id="SphereShape3D_csncc"]
 radius = 2.0
+
+[sub_resource type="SphereMesh" id="SphereMesh_csncc"]
+radius = 0.1
+height = 0.1
 
 [node name="Berries" type="Node3D" unique_id=891666075]
 script = ExtResource("1_cyyvj")
@@ -20,29 +24,48 @@ mesh = SubResource("SphereMesh_j07er")
 
 [node name="StaticBody" type="StaticBody3D" parent="." unique_id=1710396481]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5126747, 0)
-collision_layer = 2
+collision_mask = 0
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="StaticBody" unique_id=294814304]
-shape = SubResource("SphereShape3D_j07er")
+shape = SubResource("SphereShape3D_ew0m4")
 
 [node name="InteractiveArea" type="Area3D" parent="." unique_id=1675810085]
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="InteractiveArea" unique_id=68786511]
 shape = SubResource("SphereShape3D_csncc")
 
-[node name="WorkPoint" type="Node3D" parent="." unique_id=612981014]
+[node name="WorkPoints" type="Node3D" parent="." unique_id=612981014]
 
-[node name="Marker3D_N" type="Marker3D" parent="WorkPoint" unique_id=1683398182]
+[node name="Marker3D_N" type="Marker3D" parent="WorkPoints" unique_id=1683398182]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -1)
 
-[node name="Marker3D_S" type="Marker3D" parent="WorkPoint" unique_id=1134585259]
+[node name="Marker3D_S" type="Marker3D" parent="WorkPoints" unique_id=1134585259]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1)
 
-[node name="Marker3D_E" type="Marker3D" parent="WorkPoint" unique_id=169460280]
+[node name="Marker3D_E" type="Marker3D" parent="WorkPoints" unique_id=169460280]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0)
 
-[node name="Marker3D_W" type="Marker3D" parent="WorkPoint" unique_id=685941968]
+[node name="Marker3D_W" type="Marker3D" parent="WorkPoints" unique_id=685941968]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1, 0, 0)
 
 [node name="DevLabel" type="Label3D" parent="." unique_id=1660290718]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.2409896, 0)
+
+[node name="NavigationObstacle3D" type="NavigationObstacle3D" parent="." unique_id=2080193549]
+radius = 0.7
+
+[node name="Dev" type="MeshInstance3D" parent="." unique_id=538502338]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.14395672, 0.972072)
+mesh = SubResource("SphereMesh_csncc")
+
+[node name="Dev2" type="MeshInstance3D" parent="." unique_id=1453520382]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.0055866, 0.14395672, -0.007992446)
+mesh = SubResource("SphereMesh_csncc")
+
+[node name="Dev3" type="MeshInstance3D" parent="." unique_id=524894444]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.020418167, 0.14395672, -1.0084748)
+mesh = SubResource("SphereMesh_csncc")
+
+[node name="Dev4" type="MeshInstance3D" parent="." unique_id=1393035682]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.0055871, 0.14395672, 0.0022165775)
+mesh = SubResource("SphereMesh_csncc")

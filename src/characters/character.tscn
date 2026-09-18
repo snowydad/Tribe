@@ -15,6 +15,7 @@ radius = 0.38134766
 height = 1.5893555
 
 [sub_resource type="SystemFont" id="SystemFont_o43y5"]
+subpixel_positioning = 0
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_5iv74"]
 diffuse_mode = 3
@@ -29,6 +30,7 @@ inner_radius = 0.8
 
 [node name="Character" type="CharacterBody3D" unique_id=682575563]
 collision_layer = 2
+collision_mask = 3
 script = ExtResource("1_5iv74")
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="." unique_id=1434398887]
@@ -43,18 +45,16 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.0015716553, 0.023803711, -0
 shape = SubResource("CapsuleShape3D_djufw")
 
 [node name="NavigationAgent3D" type="NavigationAgent3D" parent="." unique_id=473793849]
+avoidance_enabled = true
 height = 1.5
+time_horizon_obstacles = 2.0
 
 [node name="DevLabel" type="Label3D" parent="." unique_id=1966805573]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
 billboard = 1
-no_depth_test = true
-alpha_cut = 2
-modulate = Color(0.74699646, 0.0003067854, 0.71575105, 1)
-outline_modulate = Color(0, 0, 0, 0)
+modulate = Color(0.75, 0.75, 0.75, 1)
 font = SubResource("SystemFont_o43y5")
 font_size = 48
-outline_size = 8
 horizontal_alignment = 0
 vertical_alignment = 2
 

@@ -93,7 +93,7 @@ material_override = ExtResource("7_30cu5")
 mesh = SubResource("CylinderMesh_j07er")
 
 [node name="Storage" parent="." unique_id=731626688 instance=ExtResource("8_frqgp")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 14)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.2753301, 14)
 
 [node name="Berries" parent="." unique_id=891666075 instance=ExtResource("9_2nke2")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.39073, 1.3461447, 16.559986)
