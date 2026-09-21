@@ -30,8 +30,9 @@ inner_radius = 0.8
 
 [node name="Character" type="CharacterBody3D" unique_id=682575563]
 collision_layer = 2
-collision_mask = 3
+collision_mask = 5
 script = ExtResource("1_5iv74")
+speed = 1.0
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="." unique_id=1434398887]
 mesh = SubResource("BoxMesh_j07er")
@@ -47,7 +48,8 @@ shape = SubResource("CapsuleShape3D_djufw")
 [node name="NavigationAgent3D" type="NavigationAgent3D" parent="." unique_id=473793849]
 avoidance_enabled = true
 height = 1.5
-time_horizon_obstacles = 2.0
+time_horizon_agents = 3.0
+time_horizon_obstacles = 3.0
 
 [node name="DevLabel" type="Label3D" parent="." unique_id=1966805573]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)

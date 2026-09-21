@@ -49,9 +49,9 @@ func generate_identity() -> void:
 		
 	character_name = tr(name_id)
 	
-	var min_age: int = ConfigLoader.get_value("age_ranges", "min_starting_age", 18)
-	var max_age: int = ConfigLoader.get_value("age_ranges", "max_starting_age", 35)
-	
+	# Чтение возраста из character.ini
+	var min_age: int = ConfigLoader.get_character_value("age_ranges", "min_starting_age", 18)
+	var max_age: int = ConfigLoader.get_character_value("age_ranges", "max_starting_age", 35)
 	age = randi_range(min_age, max_age)
 	
 	if TimeManager:

@@ -1,0 +1,29 @@
+[gd_scene format=3 uid="uid://dmn7620t3d78t"]
+
+[ext_resource type="Material" uid="uid://ck5o04nlff80n" path="res://assets/materials/M_Ground.tres" id="1_r41jo"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_j07er"]
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_j07er"]
+size = Vector3(1.1210938, 1.0565186, 1.1547241)
+
+[node name="DevObstacle" type="Node3D" unique_id=1725071813]
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="." unique_id=1407745666]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 4.589039, 0, 0.50351006, 0)
+material_override = ExtResource("1_r41jo")
+mesh = SubResource("BoxMesh_j07er")
+
+[node name="StaticBody3D" type="StaticBody3D" parent="." unique_id=1635070674]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.40142018, 0)
+collision_layer = 0
+collision_mask = 4
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="StaticBody3D" unique_id=1976184508]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 4.0591874, 0.0087890625, 0.12524462, 0.0025939941)
+shape = SubResource("BoxShape3D_j07er")
+
+[node name="NavigationObstacle3D" type="NavigationObstacle3D" parent="." unique_id=220448576]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.005954027, 0, -0.023815513)
+radius = 0.1
+vertices = PackedVector3Array(-0.5395535, 0, 2.3753529, -0.506, 0, -2.3, 0.046226144, 0, -2.7832894, 0.5623226, 0, -2.3097148, 0.4820242, 0, 2.3329985)

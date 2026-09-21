@@ -1,11 +1,12 @@
 # ==============================================================================
 # ФАЙЛ: src/characters/Character.gd
-# НАЗНАЧЕНИЕ: Контроллер персонажа (FSM + Динамический RVO Avoidance)
+# НАЗНАЧЕНИЕ: Контроллер персонажа с опусканием по дуге на WorkPoint при Context Drop
+#            (куст, склад, завал), RVO Avoidance и чтением скорости из .ini.
 # ==============================================================================
 extends CharacterBody3D
 
 # --- СОСТОЯНИЯ ПЕРСОНАЖА (FSM) ---
-enum State { IDLE, MOVING, CARRIED, GATHERING, DELIVERING, EATING }
+enum State { IDLE, MOVING, CARRIED, GATHERING, DELIVERING, CLEARING, EATING }
 
 @export_group("Data")
 @export var data: CharacterData
@@ -15,9 +16,10 @@ enum State { IDLE, MOVING, CARRIED, GATHERING, DELIVERING, EATING }
 @export var rotation_speed: float = 10.0
 @export var max_step_distance: float = 0.3
 
-@export_group("Work Timers")
-## Время (в секундах), необходимое для сбора 1 ягоды
-@export var gather_time: float = 2.0
+@export_group("Fallback Work Timers (in seconds)")
+@export var default_gather_time: float = 2.0
+@export var default_deposit_time: float = 1.0
+@export var default_clear_time: float = 3.0
 
 @onready var nav_agent: NavigationAgent3D = $NavigationAgent3D
 @onready var dev_label: Label3D = $DevLabel
@@ -27,11 +29,15 @@ var current_state: State = State.IDLE
 var is_selected: bool = false
 var is_being_dragged: bool = false
 
-# Временные ссылки на целевые объекты
 var target_berries: Node3D = null
 var target_storage: Node3D = null
-var _work_timer: float = 0.0
+var target_obstacle: Node3D = null
 
+var _current_target_pos: Vector3 = Vector3.ZERO
+var _work_timer: float = 0.0
+var _is_unloading_at_storage: bool = false
+
+var work_speed: float = 1.0
 var gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
 
 func _ready() -> void:
@@ -39,10 +45,16 @@ func _ready() -> void:
 		data = CharacterData.new()
 		data.generate_identity()
 	
+	# Чтение move_speed и work_speed из assets/config/game_config.ini
+	if ConfigLoader and ConfigLoader.has_method("get_value"):
+		speed = float(ConfigLoader.get_character_value("base_stats", "move_speed", speed))
+		work_speed = float(ConfigLoader.get_character_value("base_stats", "work_speed", work_speed))
+		print("config = "+str(speed))
+	
 	if nav_agent:
-		nav_agent.target_desired_distance = 1.0
+		nav_agent.target_desired_distance = 0.4
 		nav_agent.path_desired_distance = 0.5
-		# Подписываемся на сигнал RVO Avoidance (Шаг 3)
+		nav_agent.avoidance_enabled = true
 		if not nav_agent.velocity_computed.is_connected(_on_safe_velocity_computed):
 			nav_agent.velocity_computed.connect(_on_safe_velocity_computed)
 	
@@ -53,14 +65,14 @@ func _ready() -> void:
 	_update_dev_ui()
 
 func _physics_process(delta: float) -> void:
-	# 1. Если персонажа тащат в воздухе (Drag & Drop)
+	# 1. Захват в воздухе (Drag & Drop)
 	if is_being_dragged:
 		velocity = Vector3.ZERO
 		current_state = State.CARRIED
 		_update_dev_ui()
 		return
 
-	# 2. Гравитация
+	# 2. Гравитация (работает всегда в воздухе)
 	if not is_on_floor():
 		velocity.y -= gravity * delta
 
@@ -69,112 +81,160 @@ func _physics_process(delta: float) -> void:
 		State.IDLE, State.CARRIED:
 			_stop_horizontal_movement(delta)
 
-		State.MOVING, State.DELIVERING:
-			_process_movement(delta)
+		State.MOVING:
+			if not is_on_floor():
+				_process_arc_drop_movement(delta)
+			else:
+				_process_nav_movement(delta)
 
 		State.GATHERING:
-			_stop_horizontal_movement(delta)
+			if not is_on_floor():
+				_process_arc_drop_movement(delta)
+			else:
+				_stop_horizontal_movement(delta)
+			_rotate_towards_target(target_berries, delta)
 			_process_gathering(delta)
 
-	# Вызываем move_and_slide() напрямую, если Avoidance выключен или перс стоит на месте
-	if not nav_agent or not nav_agent.avoidance_enabled or not (current_state in [State.MOVING, State.DELIVERING]):
-		move_and_slide()
+		State.DELIVERING:
+			if not is_on_floor():
+				_process_arc_drop_movement(delta)
+				_rotate_towards_target(target_storage, delta)
+			elif _is_unloading_at_storage:
+				_stop_horizontal_movement(delta)
+				_rotate_towards_target(target_storage, delta)
+				_process_delivering_unload(delta)
+			else:
+				_process_nav_movement(delta)
 
+		State.CLEARING:
+			if not is_on_floor():
+				_process_arc_drop_movement(delta)
+			else:
+				_stop_horizontal_movement(delta)
+			_rotate_towards_target(target_obstacle, delta)
+			_process_clearing(delta)
+
+	move_and_slide()
 	_update_dev_ui()
 
-# --- ЛОГИКА ПЕРЕМЕЩЕНИЯ И ДИНАМИЧЕСКОГО ОБХОДА (RVO) ---
+# --- ДВИЖЕНИЕ К WORKPOINT И NAVMESH ---
 
-func _process_movement(delta: float) -> void:
-	if nav_agent and not nav_agent.is_navigation_finished() and not nav_agent.is_target_reached():
-		var next_path_pos = nav_agent.get_next_path_position()
-		var dir = (next_path_pos - global_position)
-		dir.y = 0.0
+## Движение по горизонтали XZ к точке WorkPoint во время спуска с воздуха (Context Drop)
+func _process_arc_drop_movement(delta: float) -> void:
+	var pos_xz = Vector2(global_position.x, global_position.z)
+	var target_xz = Vector2(_current_target_pos.x, _current_target_pos.z)
+	var dir_xz = target_xz - pos_xz
+	var dist = dir_xz.length()
+
+	if dist > 0.05:
+		var move_dir = dir_xz.normalized()
+		velocity.x = move_dir.x * speed * 1.2
+		velocity.z = move_dir.y * speed * 1.2
+	else:
+		global_position.x = _current_target_pos.x
+		global_position.z = _current_target_pos.z
+		velocity.x = 0.0
+		velocity.z = 0.0
+
+## Перемещение по земле с использованием NavigationAgent3D (обход кустов и складов)
+func _process_nav_movement(delta: float) -> void:
+	if not nav_agent or nav_agent.is_navigation_finished():
+		_stop_horizontal_movement(delta)
+		_on_movement_finished()
+		return
+
+	var current_pos = global_position
+	var next_path_pos = nav_agent.get_next_path_position()
+	
+	var dir = (next_path_pos - current_pos)
+	dir.y = 0.0
+	
+	var dist_to_final = Vector2(current_pos.x, current_pos.z).distance_to(Vector2(_current_target_pos.x, _current_target_pos.z))
+
+	if dist_to_final > 0.4 and dir.length_squared() > 0.001:
+		var move_dir = dir.normalized()
+		var target_vel_x = move_dir.x * speed
+		var target_vel_z = move_dir.z * speed
 		
-		var dist_to_final = global_position.distance_to(nav_agent.target_position)
+		# Кап длины шага для высокого time_scale
+		var step_len = Vector2(target_vel_x * delta, target_vel_z * delta).length()
+		if step_len > max_step_distance and delta > 0.0:
+			var cap_factor = max_step_distance / step_len
+			target_vel_x *= cap_factor
+			target_vel_z *= cap_factor
+		
+		var intended_velocity = Vector3(target_vel_x, velocity.y, target_vel_z)
+		
+		var target_angle = atan2(-move_dir.x, -move_dir.z)
+		rotation.y = lerp_angle(rotation.y, target_angle, rotation_speed * delta)
 
-		if dist_to_final > 0.8 and dir.length_squared() > 0.001:
-			var move_dir = dir.normalized()
-			var target_vel_x = move_dir.x * speed
-			var target_vel_z = move_dir.z * speed
-			
-			# Ограничитель шага при высоком time_scale
-			var step_len = Vector2(target_vel_x * delta, target_vel_z * delta).length()
-			if step_len > max_step_distance and delta > 0.0:
-				var cap_factor = max_step_distance / step_len
-				target_vel_x *= cap_factor
-				target_vel_z *= cap_factor
-			
-			var intended_velocity = Vector3(target_vel_x, velocity.y, target_vel_z)
-			
-			var target_angle = atan2(-move_dir.x, -move_dir.z)
-			rotation.y = lerp_angle(rotation.y, target_angle, rotation_speed * delta)
-
-			if nav_agent.avoidance_enabled:
-				# Передаем желаемую скорость в RVO-сервер для динамического обхода препятствий
-				nav_agent.set_velocity(intended_velocity)
-			else:
-				velocity.x = intended_velocity.x
-				velocity.z = intended_velocity.z
+		if nav_agent.avoidance_enabled:
+			nav_agent.set_velocity(intended_velocity)
 		else:
-			_stop_horizontal_movement(delta)
-			_on_movement_finished()
+			velocity.x = intended_velocity.x
+			velocity.z = intended_velocity.z
 	else:
 		_stop_horizontal_movement(delta)
 		_on_movement_finished()
 
-## Callback от RVO Avoidance сервера с рассчитанной безопасной скоростью (в обход кустов/шалашей)
 func _on_safe_velocity_computed(safe_velocity: Vector3) -> void:
-	if current_state in [State.MOVING, State.DELIVERING]:
+	if is_being_dragged or not is_on_floor():
+		return
+	if current_state == State.MOVING or (current_state == State.DELIVERING and not _is_unloading_at_storage):
 		velocity.x = safe_velocity.x
 		velocity.z = safe_velocity.z
-		move_and_slide()
+
+## Разворот лицом к целевому объекту
+func _rotate_towards_target(target_node: Node3D, delta: float) -> void:
+	if not target_node or not is_instance_valid(target_node):
+		return
+	var dir = (target_node.global_position - global_position)
+	dir.y = 0.0
+	if dir.length_squared() > 0.001:
+		var target_angle = atan2(-dir.x, -dir.z)
+		rotation.y = lerp_angle(rotation.y, target_angle, rotation_speed * delta)
 
 func _on_movement_finished() -> void:
 	if current_state == State.MOVING:
 		if target_berries and is_instance_valid(target_berries):
 			current_state = State.GATHERING
 			_work_timer = 0.0
+		elif target_obstacle and is_instance_valid(target_obstacle):
+			current_state = State.CLEARING
+			_work_timer = 0.0
 		else:
 			current_state = State.IDLE
 	elif current_state == State.DELIVERING:
-		_deposit_food_to_storage()
+		_is_unloading_at_storage = true
+		_work_timer = 0.0
 
 func _stop_horizontal_movement(delta: float) -> void:
 	velocity.x = move_toward(velocity.x, 0.0, speed * delta * 10.0)
 	velocity.z = move_toward(velocity.z, 0.0, speed * delta * 10.0)
 
-# --- КОМАНДЫ И ВЗАИМОДЕЙСТВИЕ ---
-
-## Обычное движение в точку на карте
-func move_to_position(target_pos: Vector3) -> void:
-	is_being_dragged = false
-	target_berries = null
-	target_storage = null
-	current_state = State.MOVING
-	if nav_agent:
-		nav_agent.target_position = target_pos
-
-## Назначение сбора на кусте ягод
-func start_gathering_at_berries(berries_node: Node3D) -> void:
-	is_being_dragged = false
-	target_berries = berries_node
-	_work_timer = 0.0
-	current_state = State.MOVING
-	
-	if nav_agent:
-		if berries_node.has_method("get_free_work_point"):
-			nav_agent.target_position = berries_node.get_free_work_point()
-		else:
-			nav_agent.target_position = berries_node.global_position
+# --- РАБОЧИЕ ПРОЦЕССЫ ---
 
 func _process_gathering(delta: float) -> void:
-	if not target_berries or not is_instance_valid(target_berries) or not target_berries.has_method("harvest_berry") or not target_berries.has_berries():
+	if not target_berries or not is_instance_valid(target_berries):
 		current_state = State.IDLE
 		target_berries = null
 		return
 
-	_work_timer += delta
-	if _work_timer >= gather_time:
+	var berries_available: bool = true
+	if target_berries.has_method("has_berries"):
+		berries_available = target_berries.has_berries()
+
+	if not berries_available or not target_berries.has_method("harvest_berry"):
+		current_state = State.IDLE
+		target_berries = null
+		return
+
+	var required_time: float = default_gather_time
+	if target_berries.has_method("get_work_time"):
+		required_time = target_berries.get_work_time()
+
+	_work_timer += delta * work_speed
+	if _work_timer >= required_time:
 		_work_timer = 0.0
 		if target_berries.harvest_berry():
 			data.carried_item = "berry"
@@ -182,13 +242,123 @@ func _process_gathering(delta: float) -> void:
 			print("[Character] Harvested 1 berry! Heading to storage...")
 			_go_to_nearest_storage()
 
-## Поиск ближайшего склада на сцене (по группе "storage")
+func _process_delivering_unload(delta: float) -> void:
+	if not target_storage or not is_instance_valid(target_storage):
+		_is_unloading_at_storage = false
+		current_state = State.IDLE
+		return
+
+	var required_time: float = default_deposit_time
+	if target_storage.has_method("get_work_time"):
+		required_time = target_storage.get_work_time()
+
+	_work_timer += delta * work_speed
+	if _work_timer >= required_time:
+		_work_timer = 0.0
+		_is_unloading_at_storage = false
+		_deposit_food_to_storage()
+
+func _process_clearing(delta: float) -> void:
+	if not target_obstacle or not is_instance_valid(target_obstacle):
+		current_state = State.IDLE
+		target_obstacle = null
+		return
+
+	var required_time: float = default_clear_time
+	if target_obstacle.has_method("get_work_time"):
+		required_time = target_obstacle.get_work_time()
+
+	_work_timer += delta * work_speed
+	if _work_timer >= required_time:
+		_work_timer = 0.0
+		if target_obstacle.has_method("clear_obstacle"):
+			target_obstacle.clear_obstacle()
+		print("[Character] Cleared obstacle!")
+		current_state = State.IDLE
+		target_obstacle = null
+
+# --- КОМАНДЫ И ВЗАИМОДЕЙСТВИЕ ---
+
+func move_to_position(target_pos: Vector3) -> void:
+	is_being_dragged = false
+	_is_unloading_at_storage = false
+	target_berries = null
+	target_storage = null
+	target_obstacle = null
+	_current_target_pos = target_pos
+	current_state = State.MOVING
+	if is_on_floor() and nav_agent:
+		nav_agent.target_position = target_pos
+
+func start_gathering_at_berries(berries_node: Node3D) -> void:
+	is_being_dragged = false
+	_is_unloading_at_storage = false
+	target_berries = berries_node
+	target_obstacle = null
+	_work_timer = 0.0
+	_current_target_pos = _get_free_work_point_safe(berries_node)
+	
+	if not is_on_floor():
+		# Сброс из воздуха: опускаемся по дуге на WorkPoint
+		current_state = State.GATHERING
+	else:
+		# Идем ногами по земле к кусту
+		var pos_xz = Vector2(global_position.x, global_position.z)
+		var target_xz = Vector2(_current_target_pos.x, _current_target_pos.z)
+		if pos_xz.distance_to(target_xz) <= 0.4:
+			current_state = State.GATHERING
+		else:
+			current_state = State.MOVING
+			if nav_agent:
+				nav_agent.target_position = _current_target_pos
+
+func start_delivering_to_storage(storage_node: Node3D) -> void:
+	is_being_dragged = false
+	target_storage = storage_node
+	target_obstacle = null
+	_work_timer = 0.0
+	_current_target_pos = _get_free_work_point_safe(storage_node)
+	
+	current_state = State.DELIVERING
+	
+	if not is_on_floor():
+		# Сброс из воздуха: опускаемся по дуге на WorkPoint склада и сразу разгружаемся
+		_is_unloading_at_storage = true
+	else:
+		# Идем ногами по земле к складу
+		_is_unloading_at_storage = false
+		if nav_agent:
+			nav_agent.target_position = _current_target_pos
+
+func start_clearing_obstacle(obstacle_node: Node3D) -> void:
+	is_being_dragged = false
+	_is_unloading_at_storage = false
+	target_obstacle = obstacle_node
+	target_berries = null
+	_work_timer = 0.0
+	_current_target_pos = _get_free_work_point_safe(obstacle_node)
+	
+	if not is_on_floor():
+		current_state = State.CLEARING
+	else:
+		var pos_xz = Vector2(global_position.x, global_position.z)
+		var target_xz = Vector2(_current_target_pos.x, _current_target_pos.z)
+		if pos_xz.distance_to(target_xz) <= 0.4:
+			current_state = State.CLEARING
+		else:
+			current_state = State.MOVING
+			if nav_agent:
+				nav_agent.target_position = _current_target_pos
+
 func _go_to_nearest_storage() -> void:
 	var storages = get_tree().get_nodes_in_group("storage")
 	if storages.size() > 0:
-		var nearest_storage: Node3D = storages as Node3D
+		var nearest_storage: Node3D = storages.front() as Node3D
+		if not nearest_storage:
+			current_state = State.IDLE
+			return
+			
 		var min_dist: float = global_position.distance_to(nearest_storage.global_position)
-		
 		for s in storages:
 			var node_s = s as Node3D
 			if node_s:
@@ -197,29 +367,43 @@ func _go_to_nearest_storage() -> void:
 					min_dist = dist
 					nearest_storage = node_s
 					
-		target_storage = nearest_storage
-		current_state = State.DELIVERING
-		if nav_agent:
-			nav_agent.target_position = target_storage.global_position
+		start_delivering_to_storage(nearest_storage)
 	else:
 		print("[Character] No storage found in group 'storage'!")
 		current_state = State.IDLE
 
-## Разгрузка ресурсов на складе
 func _deposit_food_to_storage() -> void:
 	if target_storage and is_instance_valid(target_storage) and target_storage.has_method("deposit_food"):
-		target_storage.deposit_food(data.item_amount)
-		data.carried_item = ""
-		data.item_amount = 0
-		print("[Character] Deposited berries to storage.")
+		if data.item_amount > 0:
+			target_storage.deposit_food(data.item_amount)
+			data.carried_item = ""
+			data.item_amount = 0
+			print("[Character] Deposited berries to storage.")
 		
-		# Если на кусте еще остались ягоды — возвращаемся за следующей
-		if target_berries and is_instance_valid(target_berries) and target_berries.has_berries():
-			start_gathering_at_berries(target_berries)
-		else:
-			current_state = State.IDLE
+		if target_berries and is_instance_valid(target_berries):
+			var still_has: bool = true
+			if target_berries.has_method("has_berries"):
+				still_has = target_berries.has_berries()
+			if still_has:
+				start_gathering_at_berries(target_berries)
+				return
+		
+		current_state = State.IDLE
 
-# --- ВЫДЕЛЕНИЕ И UI ---
+func _get_free_work_point_safe(node: Node3D) -> Vector3:
+	if not node or not is_instance_valid(node):
+		return global_position
+	if not node.has_method("get_free_work_point"):
+		return node.global_position
+		
+	for method in node.get_method_list():
+		if method["name"] == "get_free_work_point":
+			if method["args"].size() == 0:
+				return node.get_free_work_point()
+			else:
+				return node.get_free_work_point(self)
+				
+	return node.global_position
 
 func set_selected(selected: bool) -> void:
 	is_selected = selected
@@ -235,10 +419,17 @@ func _update_dev_ui() -> void:
 		
 	var gender_str = "M" if data.gender == CharacterData.Gender.MALE else "F"
 	var state_str = State.keys()[current_state]
+	if current_state == State.DELIVERING and _is_unloading_at_storage:
+		state_str = "UNLOADING"
 	
 	var text_info = "%s (%s) [%s]%s\n" % [data.character_name, gender_str, state_str, " *SEL*" if is_selected else ""]
 	text_info += "Age: %d yr | HP: %.0f\n" % [data.age, data.health]
-	text_info += "Carrying: %s (%d)\n" % [data.carried_item if data.carried_item != "" else "None", data.item_amount]
+	text_info += "Carrying: %s (%d) | Spd: %.1f | WSpd: %.1f\n" % [
+		data.carried_item if data.carried_item != "" else "None", 
+		data.item_amount, 
+		speed, 
+		work_speed
+	]
 	text_info += "Vel: %.1f m/s" % velocity.length()
 	
 	dev_label.text = text_info

@@ -6,10 +6,15 @@
 [sub_resource type="BoxMesh" id="BoxMesh_csncc"]
 size = Vector3(2, 1, 2)
 
-[sub_resource type="BoxShape3D" id="BoxShape3D_p1a4l"]
+[sub_resource type="SphereShape3D" id="SphereShape3D_2nke2"]
+radius = 1.0
 
 [sub_resource type="SphereShape3D" id="SphereShape3D_j07er"]
 radius = 2.0
+
+[sub_resource type="SphereMesh" id="SphereMesh_j07er"]
+radius = 0.1
+height = 0.1
 
 [node name="Storage" type="Node3D" unique_id=731626688]
 script = ExtResource("1_fpbs4")
@@ -19,14 +24,17 @@ material_override = ExtResource("2_gvi7j")
 mesh = SubResource("BoxMesh_csncc")
 
 [node name="StaticBody3D" type="StaticBody3D" parent="." unique_id=709604376]
-collision_layer = 2
-collision_mask = 3
+collision_layer = 4
+collision_mask = 0
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="StaticBody3D" unique_id=242124298]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.005493164, 0, -0.0061035156)
-shape = SubResource("BoxShape3D_p1a4l")
+shape = SubResource("SphereShape3D_2nke2")
+disabled = true
 
 [node name="InteractiveArea" type="Area3D" parent="." unique_id=1465270260]
+collision_layer = 4
+collision_mask = 0
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="InteractiveArea" unique_id=453137656]
 shape = SubResource("SphereShape3D_j07er")
@@ -51,3 +59,19 @@ billboard = 1
 
 [node name="NavigationObstacle3D" type="NavigationObstacle3D" parent="." unique_id=1024809809]
 radius = 1.0
+
+[node name="Dev" type="MeshInstance3D" parent="." unique_id=1569840112]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.15, -1.5)
+mesh = SubResource("SphereMesh_j07er")
+
+[node name="Dev2" type="MeshInstance3D" parent="." unique_id=1735317039]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.5000353, 0.15, -0.013854027)
+mesh = SubResource("SphereMesh_j07er")
+
+[node name="Dev3" type="MeshInstance3D" parent="." unique_id=824178556]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.0069446564, 0.15, 1.5139598)
+mesh = SubResource("SphereMesh_j07er")
+
+[node name="Dev4" type="MeshInstance3D" parent="." unique_id=1327534507]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.5208693, 0.15, 0.01392436)
+mesh = SubResource("SphereMesh_j07er")

@@ -5,7 +5,7 @@
 
 [sub_resource type="SphereMesh" id="SphereMesh_j07er"]
 
-[sub_resource type="SphereShape3D" id="SphereShape3D_ew0m4"]
+[sub_resource type="SphereShape3D" id="SphereShape3D_km7bn"]
 
 [sub_resource type="SphereShape3D" id="SphereShape3D_csncc"]
 radius = 2.0
@@ -24,12 +24,17 @@ mesh = SubResource("SphereMesh_j07er")
 
 [node name="StaticBody" type="StaticBody3D" parent="." unique_id=1710396481]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5126747, 0)
+collision_layer = 4
 collision_mask = 0
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="StaticBody" unique_id=294814304]
-shape = SubResource("SphereShape3D_ew0m4")
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.012451172, 0)
+shape = SubResource("SphereShape3D_km7bn")
+disabled = true
 
 [node name="InteractiveArea" type="Area3D" parent="." unique_id=1675810085]
+collision_layer = 4
+collision_mask = 0
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="InteractiveArea" unique_id=68786511]
 shape = SubResource("SphereShape3D_csncc")
@@ -49,7 +54,7 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0)
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1, 0, 0)
 
 [node name="DevLabel" type="Label3D" parent="." unique_id=1660290718]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.2409896, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.3506087, 0.49014282)
 
 [node name="NavigationObstacle3D" type="NavigationObstacle3D" parent="." unique_id=2080193549]
 radius = 0.7

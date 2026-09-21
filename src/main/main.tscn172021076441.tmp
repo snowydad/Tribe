@@ -9,8 +9,6 @@
 [ext_resource type="Material" uid="uid://ck5o04nlff80n" path="res://assets/materials/M_Ground.tres" id="7_30cu5"]
 [ext_resource type="PackedScene" uid="uid://24t67vidpa66" path="res://src/environment/storage.tscn" id="8_frqgp"]
 [ext_resource type="PackedScene" uid="uid://cxbpv8trxi8g7" path="res://src/environment/berries.tscn" id="9_2nke2"]
-[ext_resource type="PackedScene" uid="uid://dmn7620t3d78t" path="res://src/environment/dev_obstacle.tscn" id="10_km7bn"]
-[ext_resource type="PackedScene" uid="uid://bccj0d0sn5wp4" path="res://assets/models/berries.glb" id="11_erw1m"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_frqgp"]
 
@@ -53,7 +51,7 @@ shadow_enabled = true
 directional_shadow_pancake_size = 100.0
 
 [node name="CameraAnchor" type="Node3D" parent="." unique_id=1779606153]
-transform = Transform3D(1, 0, 0, 0, 0.99999994, 0, 0, 0, 0.99999994, 0, 3, 9.282375)
+transform = Transform3D(1, 0, 0, 0, 0.99999994, 0, 0, 0, 0.99999994, 0, 3, 0)
 script = ExtResource("3_djufw")
 max_zoom = 65.0
 height_offset = 1.0
@@ -75,15 +73,14 @@ material_override = ExtResource("5_jqarl")
 mesh = SubResource("SphereMesh_csncc")
 
 [node name="Character" parent="." unique_id=682575563 instance=ExtResource("2_ab7mr")]
-transform = Transform3D(0.9987056, 0, -0.05086355, 0, 1, 0, 0.05086355, 0, 0.9987056, 0, 2.620082, 9.29436)
-speed = 5.0
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.620082, 0)
 
-[node name="DevBox" type="CSGBox3D" parent="." unique_id=1420518224]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.1304998, 3.8581338)
+[node name="CSGBox3D" type="CSGBox3D" parent="." unique_id=1420518224]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.56042194, 3.8581338)
 size = Vector3(2, 2, 2)
 
-[node name="DevSphere" type="CSGSphere3D" parent="." unique_id=714643722]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 12.526248, 2.3462727, 16.016521)
+[node name="CSGSphere3D" type="CSGSphere3D" parent="." unique_id=714643722]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7.717993, 2.3462727, 16.016521)
 radius = 1.0
 
 [node name="Island" type="MeshInstance3D" parent="." unique_id=1500141399]
@@ -97,13 +94,7 @@ material_override = ExtResource("7_30cu5")
 mesh = SubResource("CylinderMesh_j07er")
 
 [node name="Storage" parent="." unique_id=731626688 instance=ExtResource("8_frqgp")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6.352808, 1.2753301, 14)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.2753301, 14)
 
 [node name="Berries" parent="." unique_id=891666075 instance=ExtResource("9_2nke2")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.39073, 1.3461447, 16.559986)
-
-[node name="DevObstacle" parent="." unique_id=1725071813 instance=ExtResource("10_km7bn")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.93157995, 1.259217, 14.869888)
-
-[node name="berries2" parent="." unique_id=698069134 instance=ExtResource("11_erw1m")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.1757421, 1.3854727, 19.706635)
