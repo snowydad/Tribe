@@ -103,7 +103,7 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6.352808, 1.2753301, 14)
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.39073, 1.3461447, 16.559986)
 
 [node name="DevObstacle" parent="." unique_id=1725071813 instance=ExtResource("10_km7bn")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.93157995, 1.259217, 12.428661)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.93157995, 1.259217, 9.068602)
 
 [node name="berries2" parent="." unique_id=698069134 instance=ExtResource("11_erw1m")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.2460732, 1.3854727, 18.433493)
