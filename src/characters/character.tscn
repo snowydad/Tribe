@@ -48,8 +48,9 @@ shape = SubResource("CapsuleShape3D_djufw")
 [node name="NavigationAgent3D" type="NavigationAgent3D" parent="." unique_id=473793849]
 avoidance_enabled = true
 height = 1.5
-time_horizon_agents = 3.0
-time_horizon_obstacles = 3.0
+radius = 0.4
+time_horizon_agents = 2.0
+time_horizon_obstacles = 2.0
 
 [node name="DevLabel" type="Label3D" parent="." unique_id=1966805573]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)

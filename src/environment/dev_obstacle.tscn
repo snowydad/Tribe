@@ -25,5 +25,5 @@ shape = SubResource("BoxShape3D_j07er")
 
 [node name="NavigationObstacle3D" type="NavigationObstacle3D" parent="." unique_id=220448576]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.005954027, 0, -0.023815513)
-radius = 0.1
+radius = 1.1
 vertices = PackedVector3Array(-0.5395535, 0, 2.3753529, -0.506, 0, -2.3, 0.046226144, 0, -2.7832894, 0.5623226, 0, -2.3097148, 0.4820242, 0, 2.3329985)
