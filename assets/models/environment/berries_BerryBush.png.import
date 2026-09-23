@@ -3,24 +3,24 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://cose3urem56pu"
-path.s3tc="res://.godot/imported/berries_BerryBush.png-ee10c8f6142f3e4643f79e9004c186ee.s3tc.ctex"
+path.bptc="res://.godot/imported/berries_BerryBush.png-ee10c8f6142f3e4643f79e9004c186ee.bptc.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc"],
 "vram_texture": true
 }
 generator_parameters={
-"md5": "58bdaedca4336cac889301dd1ad8b16a"
+"md5": "0d12132110b5c1475ae5cb8aa943a8af"
 }
 
 [deps]
 
 source_file="res://assets/models/environment/berries_BerryBush.png"
-dest_files=["res://.godot/imported/berries_BerryBush.png-ee10c8f6142f3e4643f79e9004c186ee.s3tc.ctex"]
+dest_files=["res://.godot/imported/berries_BerryBush.png-ee10c8f6142f3e4643f79e9004c186ee.bptc.ctex"]
 
 [params]
 
 compress/mode=2
-compress/high_quality=false
+compress/high_quality=true
 compress/lossy_quality=0.7
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0

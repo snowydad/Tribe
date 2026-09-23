@@ -1,8 +1,23 @@
 [gd_scene format=3 uid="uid://cxbpv8trxi8g7"]
 
 [ext_resource type="Script" uid="uid://ugf2rtbs5ikb" path="res://src/environment/berries.gd" id="1_cyyvj"]
-[ext_resource type="Material" uid="uid://dd7c0ap5o70be" path="res://assets/materials/M_Berries.tres" id="1_sllsq"]
 [ext_resource type="PackedScene" uid="uid://u72by4xtv28g" path="res://assets/models/environment/berries.glb" id="2_jpmde"]
+
+[sub_resource type="FastNoiseLite" id="FastNoiseLite_slemt"]
+noise_type = 0
+fractal_type = 2
+fractal_octaves = 1
+fractal_lacunarity = 1.0
+fractal_ping_pong_strength = 1.0
+
+[sub_resource type="NoiseTexture2D" id="NoiseTexture2D_dpytq"]
+noise = SubResource("FastNoiseLite_slemt")
+seamless = true
+as_normal_map = true
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_cyyvj"]
+albedo_color = Color(1, 0, 0, 1)
+albedo_texture = SubResource("NoiseTexture2D_dpytq")
 
 [sub_resource type="SphereMesh" id="SphereMesh_j07er"]
 
@@ -23,7 +38,7 @@ script = ExtResource("1_cyyvj")
 [node name="MeshInstance3D" type="MeshInstance3D" parent="." unique_id=1112722748]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5126747, 0)
 visible = false
-material_override = ExtResource("1_sllsq")
+material_override = SubResource("StandardMaterial3D_cyyvj")
 mesh = SubResource("SphereMesh_j07er")
 
 [node name="StaticBody" type="StaticBody3D" parent="." unique_id=1710396481]
@@ -32,7 +47,7 @@ collision_layer = 4
 collision_mask = 0
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="StaticBody" unique_id=294814304]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.012451172, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.502121, 0)
 shape = SubResource("SphereShape3D_km7bn")
 disabled = true
 

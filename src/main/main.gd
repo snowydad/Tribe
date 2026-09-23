@@ -1,84 +1,48 @@
 # ==============================================================================
-# MAIN.GD — Главный Менеджер Сцены и Точка Входа (Godot 4)
+# ФАЙЛ: src/objects/berries.gd
+# НАЗНАЧЕНИЕ: Контроллер куста ягод 'berries' с партионным созреванием 5 ягод.
 # ==============================================================================
-# 
-# СТРУКТУРА УЗЛОВ В СЦЕНЕ:
-#   Main (Node3D)                   <-- [Этот скрипт висит здесь] Корневой узел игры
-#    ├── Terrain (Instance)         <-- Игровая карта / Остров
-#    ├── WorldEnvironment           <-- Окружение (небо, туман, свет)
-#    ├── DirectionalLight3D         <-- Солнце
-#    ├── CameraAnchor (Instance)    <-- RTS-камера с физикой и ограничениями
-#    │    └── SpringArm3D
-#    │         └── Camera3D
-#    ├── Character (Instance)       <-- Персонаж / Юнит
-#    └── CSGBox3D                   <-- Отладочный объект
-#
-# КЛЮЧЕВЫЕ МЕХАНИКИ:
-# 1. Распознавание Клика / Драга:
-#    Разделяет короткий клик мышкой (отправка юнита) от зажатия для перетаскивания 
-#    камеры через проверку дистанции (drag_threshold < 5px).
-#
-# 2. Отправка Персонажа (Raycast с камеры):
-#    Пускает 3D-луч из камеры в точку клика на экране и передает полученную 
-#    координату поверхности в Character для перемещения по NavigationAgent3D.
-# ==============================================================================
-
 extends Node3D
 
-# --- ССЫЛКИ НА УЗЛЫ В ИНСПЕКТОРЕ ---
-@export_group("Scene Connections")
-## Ссылка на камеру внутри иерархии CameraAnchor/SpringArm3D/Camera3D
-@export var camera: Camera3D
+@export var max_berries: int = 5        # Вся партия = 5 ягод
+@export var ripening_time: float = 15.0   # Время полного созревания всей партии
 
-## Ссылка на управляемого персонажа
-@export var character: CharacterBody3D
-
-
-# --- НАСТРОЙКИ ВВОДА ---
-@export_group("Input Settings")
-## Максимальное смещение мыши (в пикселях), при котором нажатие считается кликом, а не драгом
-@export var click_threshold: float = 5.0
-
-var click_start_pos: Vector2 = Vector2.ZERO
-
+var current_berries: int = 0
+var is_ripening: bool = false
+var _ripen_timer: float = 0.0
 
 func _ready() -> void:
-	# Авто-поиск узлов, если они не завязаны вручную в Инспекторе
-	if not camera:
-		camera = get_node_or_null("CameraAnchor/SpringArm3D/Camera3D")
-	if not character:
-		character = get_node_or_null("Character")
+	current_berries = max_berries # На старте куст полностью спелый (5 ягод)
+	_update_visuals()
 
+## Проверка наличия ягод для сбора
+func has_berries() -> bool:
+	return current_berries > 0
 
-func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
-		if event.pressed:
-			click_start_pos = event.position
-		else:
-			# Отправляем персонажа только если это был короткий клик, а не перетаскивание
-			if click_start_pos.distance_to(event.position) < click_threshold:
-				_send_character_to_click(event.position)
-
-
-func _send_character_to_click(screen_position: Vector2) -> void:
-	if not camera:
-		print("Ошибка: Камера не найдена!")
-		return
+## Сбор 1 ягоды персонажем
+func harvest_berry() -> bool:
+	if current_berries > 0:
+		current_berries -= 1
+		_update_visuals()
 		
-	if not character:
-		print("Ошибка: Персонаж не назначен!")
-		return
+		# Когда сорвали ПОСЛЕДНЮЮ (5-ю) ягоду — куст запускает таймер созревания
+		if current_berries == 0:
+			is_ripening = true
+			_ripen_timer = 0.0
+			print("[Berries] All 5 berries harvested! Starting full crop ripening...")
+		return true
+	return false
 
-	# Пускаем луч из 3D-камеры в точку клика на экране
-	var ray_origin = camera.project_ray_origin(screen_position)
-	var ray_end = ray_origin + camera.project_ray_normal(screen_position) * 1000.0
-	
-	var space_state = get_world_3d().direct_space_state
-	var query = PhysicsRayQueryParameters3D.create(ray_origin, ray_end)
-	var result = space_state.intersect_ray(query)
-	
-	if result:
-		print
-		## Передаем целевую точку движения персонажу
-		#if character.has_method("move_to_position"):
-			#character.move_to_position(result.position)
+func _process(delta: float) -> void:
+	# Таймер тикает ТОЛЬКО когда куст полностью пуст (0 ягод)
+	if is_ripening:
+		_ripen_timer += delta
+		if _ripen_timer >= ripening_time:
+			is_ripening = false
+			current_berries = max_berries # ВСЯ ПАРТИЯ (5 ЯГОД) СОЗРЕВАЕТ ОДНОВРЕМЕННО
+			_update_visuals()
+			print("[Berries] Crop is fully ripe! All 5 berries restored.")
+
+func _update_visuals() -> void:
+	# Логика скрытия/отображения мешей ягод на ветках
+	pass
