@@ -31,4 +31,5 @@ collision_mask = 0
 [node name="CollisionShape3D" type="CollisionShape3D" parent="NavigationRegion3D/terrain00/Terrain_001/StaticBody3D" unique_id=1569817416]
 shape = SubResource("ConcavePolygonShape3D_ucpde")
 
+[editable path="sea"]
 [editable path="NavigationRegion3D/terrain00"]

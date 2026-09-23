@@ -56,6 +56,7 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.5, 0, 0)
 [node name="DevLabel" type="Label3D" parent="." unique_id=407215896]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
 billboard = 1
+alpha_cut = 1
 
 [node name="NavigationObstacle3D" type="NavigationObstacle3D" parent="." unique_id=1024809809]
 radius = 1.0

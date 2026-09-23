@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://bccj0d0sn5wp4"
-path="res://.godot/imported/berries.glb-213c1da84c1fbe58d0f3573e26ba56c6.scn"
+uid="uid://u72by4xtv28g"
+path="res://.godot/imported/berries.glb-43ddd199b3f94eead64469ec85a2ecb6.scn"
 
 [deps]
 
-source_file="res://assets/models/berries.glb"
-dest_files=["res://.godot/imported/berries.glb-213c1da84c1fbe58d0f3573e26ba56c6.scn"]
+source_file="res://assets/models/environment/berries.glb"
+dest_files=["res://.godot/imported/berries.glb-43ddd199b3f94eead64469ec85a2ecb6.scn"]
 
 [params]
 

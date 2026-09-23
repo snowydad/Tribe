@@ -2,6 +2,7 @@
 
 [ext_resource type="Script" uid="uid://ugf2rtbs5ikb" path="res://src/environment/berries.gd" id="1_cyyvj"]
 [ext_resource type="Material" uid="uid://dd7c0ap5o70be" path="res://assets/materials/M_Berries.tres" id="1_sllsq"]
+[ext_resource type="PackedScene" uid="uid://u72by4xtv28g" path="res://assets/models/environment/berries.glb" id="2_jpmde"]
 
 [sub_resource type="SphereMesh" id="SphereMesh_j07er"]
 
@@ -17,8 +18,11 @@ height = 0.1
 [node name="Berries" type="Node3D" unique_id=891666075]
 script = ExtResource("1_cyyvj")
 
+[node name="berries" parent="." unique_id=359153156 instance=ExtResource("2_jpmde")]
+
 [node name="MeshInstance3D" type="MeshInstance3D" parent="." unique_id=1112722748]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5126747, 0)
+visible = false
 material_override = ExtResource("1_sllsq")
 mesh = SubResource("SphereMesh_j07er")
 
@@ -55,9 +59,11 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1, 0, 0)
 
 [node name="DevLabel" type="Label3D" parent="." unique_id=1660290718]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.3506087, 0.49014282)
+billboard = 2
+alpha_cut = 1
 
 [node name="NavigationObstacle3D" type="NavigationObstacle3D" parent="." unique_id=2080193549]
-radius = 0.6
+radius = 0.5
 
 [node name="Dev" type="MeshInstance3D" parent="." unique_id=538502338]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.14395672, 0.972072)
@@ -74,3 +80,5 @@ mesh = SubResource("SphereMesh_csncc")
 [node name="Dev4" type="MeshInstance3D" parent="." unique_id=1393035682]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.0055871, 0.14395672, 0.0022165775)
 mesh = SubResource("SphereMesh_csncc")
+
+[editable path="berries"]

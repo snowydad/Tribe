@@ -1,8 +1,10 @@
 # ==============================================================================
 # ФАЙЛ: src/main/camera_3d.gd
-# НАЗНАЧЕНИЕ: RTS-камера с подстройкой высоты над рельефом, инерцией и резинкой
+# НАЗНАЧЕНИЕ: RTS-камера с подстройкой высоты над рельефом (слой 1), инерцией,
+#            резинкой и вращением вокруг якоря зажатым колесиком мыши (MMB).
 # ==============================================================================
-# v 2026.09.16
+# Базовый скрипт из источника "CameraAncor-Camera3D" + Вращение MMB
+
 extends Node3D
 
 @export_group("Zoom & Pitch Settings")
@@ -12,16 +14,17 @@ extends Node3D
 @export var pitch_at_min_zoom: float = -20.0
 @export var pitch_at_max_zoom: float = -60.0
 
+@export_group("Orbit Rotation (MMB)")
+## Чувствительность вращения вокруг якоря колесиком мыши
+@export var rotate_sensitivity: float = 0.005
+
 @export_group("Movement & Surface")
 @export var pan_speed: float = 1.0
 @export var friction: float = 15.0
-
 ## Базовый уровень поверхности / моря
 @export var sea_level: float = 2.0
-
 ## Высота точки фокуса (якоря) над землей (например, 1.5 м — уровень головы персонажа)
 @export var height_offset: float = 1.5
-
 ## Скорость плавности огибания высоты рельефа
 @export var height_smooth_speed: float = 10.0
 
@@ -42,6 +45,7 @@ var is_locked: bool = false:
 			cancel_drag()
 
 var _is_dragging: bool = false
+var _is_rotating: bool = false
 var _drag_plane: Plane
 var _drag_start_world_pos: Vector3 = Vector3.ZERO
 var _pan_velocity: Vector3 = Vector3.ZERO
@@ -50,9 +54,10 @@ func _ready() -> void:
 	_update_zoom_and_pitch()
 	_snap_to_terrain_height(1.0)
 
-## Сброс состояния драга и инерции
+## Сброс состояния драга, вращения и инерции
 func cancel_drag() -> void:
 	_is_dragging = false
+	_is_rotating = false
 	_drag_start_world_pos = Vector3.ZERO
 	_pan_velocity = Vector3.ZERO
 
@@ -63,7 +68,18 @@ func _unhandled_input(event: InputEvent) -> void:
 	if is_locked:
 		return
 
-	if event is InputEventMouseButton:
+	# --- 1. ВРАЩЕНИЕ ВОКРУГ ЯКОРЯ (Зажатое колесико мыши / MMB) ---
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_MIDDLE:
+		if event.pressed:
+			_is_rotating = true
+		else:
+			_is_rotating = false
+
+	elif event is InputEventMouseMotion and _is_rotating:
+		rotation.y -= event.relative.x * rotate_sensitivity
+
+	# --- 2. ЗУМ И ПЕРЕТАСКИВАНИЕ КАРТЫ (ЛКМ / Колесо) ---
+	elif event is InputEventMouseButton:
 		if event.button_index == MOUSE_BUTTON_WHEEL_UP and event.pressed:
 			_zoom(-zoom_speed)
 		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN and event.pressed:
@@ -79,7 +95,6 @@ func _unhandled_input(event: InputEvent) -> void:
 		if current_world_pos != Vector3.ZERO:
 			var delta = _drag_start_world_pos - current_world_pos
 			var target_pos = global_position + Vector3(delta.x, 0, delta.z)
-			
 			global_position = _apply_rubber_band_to_position(target_pos)
 			_pan_velocity = Vector3(delta.x, 0, delta.z) / get_process_delta_time()
 
@@ -88,7 +103,7 @@ func _process(delta: float) -> void:
 	if not _is_dragging:
 		_snap_to_terrain_height(delta * height_smooth_speed)
 
-	if is_locked or _is_dragging:
+	if is_locked or _is_dragging or _is_rotating:
 		return
 
 	if _is_position_out_of_bounds(global_position):
@@ -105,33 +120,29 @@ func _snap_to_terrain_height(weight: float) -> void:
 	var space_state = get_world_3d().direct_space_state
 	var ray_origin = Vector3(global_position.x, 200.0, global_position.z)
 	var ray_end = Vector3(global_position.x, -50.0, global_position.z)
-	
 	var query = PhysicsRayQueryParameters3D.create(ray_origin, ray_end)
 	query.collision_mask = 1 # Проверяем ТОЛЬКО террейн (слой 1)
-	
+
 	var result = space_state.intersect_ray(query)
+
 	var target_y: float = sea_level + height_offset
-	
 	if result:
 		target_y = max(result.position.y + height_offset, sea_level + height_offset)
-		
 	global_position.y = lerp(global_position.y, target_y, clamp(weight, 0.0, 1.0))
 
 ## Захват 3D-точки на рельефе (collision_mask = 1)
 func _start_drag(mouse_pos: Vector2) -> void:
 	if not camera or is_locked:
 		return
-		
 	var ray_origin = camera.project_ray_origin(mouse_pos)
 	var ray_dir = camera.project_ray_normal(mouse_pos)
 	var ray_end = ray_origin + ray_dir * 1000.0
-	
+
 	var space_state = get_world_3d().direct_space_state
 	var query = PhysicsRayQueryParameters3D.create(ray_origin, ray_end)
 	query.collision_mask = 1 # Игнорируем персонажей и объекты на слое 2
-	
+
 	var result = space_state.intersect_ray(query)
-	
 	if result:
 		_is_dragging = true
 		_drag_start_world_pos = result.position
@@ -145,8 +156,7 @@ func _start_drag(mouse_pos: Vector2) -> void:
 			_drag_plane = sea_plane
 		else:
 			_is_dragging = false
-			
-	_pan_velocity = Vector3.ZERO
+			_pan_velocity = Vector3.ZERO
 
 func _stop_drag() -> void:
 	_is_dragging = false

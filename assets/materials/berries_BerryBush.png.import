@@ -2,20 +2,20 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://baij5djb2bb3q"
-path.s3tc="res://.godot/imported/BerryBush.png-62ffba60a50f6879090bdc82c4fc4b87.s3tc.ctex"
+uid="uid://cpbp0wm4epgdr"
+path.s3tc="res://.godot/imported/berries_BerryBush.png-ff155c9e24b6157e92ee070836662002.s3tc.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc"],
 "vram_texture": true
 }
 generator_parameters={
-"md5": "dde69c44715ac3febc214c5701120cea"
+"md5": "58bdaedca4336cac889301dd1ad8b16a"
 }
 
 [deps]
 
-source_file="res://assets/models/BerryBush.png"
-dest_files=["res://.godot/imported/BerryBush.png-62ffba60a50f6879090bdc82c4fc4b87.s3tc.ctex"]
+source_file="res://assets/materials/berries_BerryBush.png"
+dest_files=["res://.godot/imported/berries_BerryBush.png-ff155c9e24b6157e92ee070836662002.s3tc.ctex"]
 
 [params]
 

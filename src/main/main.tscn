@@ -10,7 +10,6 @@
 [ext_resource type="PackedScene" uid="uid://24t67vidpa66" path="res://src/environment/storage.tscn" id="8_frqgp"]
 [ext_resource type="PackedScene" uid="uid://cxbpv8trxi8g7" path="res://src/environment/berries.tscn" id="9_2nke2"]
 [ext_resource type="PackedScene" uid="uid://dmn7620t3d78t" path="res://src/environment/dev_obstacle.tscn" id="10_km7bn"]
-[ext_resource type="PackedScene" uid="uid://bccj0d0sn5wp4" path="res://assets/models/berries.glb" id="11_erw1m"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_frqgp"]
 
@@ -104,6 +103,3 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.39073, 1.3461447, 16.559986
 
 [node name="DevObstacle" parent="." unique_id=1725071813 instance=ExtResource("10_km7bn")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.93157995, 1.259217, 9.068602)
-
-[node name="berries2" parent="." unique_id=698069134 instance=ExtResource("11_erw1m")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.2460732, 1.3854727, 18.433493)
