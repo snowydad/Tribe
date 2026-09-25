@@ -3,7 +3,7 @@
 # НАЗНАЧЕНИЕ: Контроллер персонажа с зафиксированным инпутом, считыванием .ini
 #            (move_speed, work_speed), поддержкой RVO2 Avoidance для обхода
 #            NavigationObstacle3D, спуском по дуге при Context Drop и
-#            непрерывным рабочим циклом фуражира.
+#            непрерывным рабочим циклом фуражира + поддержка анимаций.
 # ==============================================================================
 extends CharacterBody3D
 
@@ -43,12 +43,15 @@ var _is_unloading_at_storage: bool = false
 var work_speed: float = 1.0
 var gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
 
+var _anim_player: AnimationPlayer = null
+
 func _ready() -> void:
 	if not data:
 		data = CharacterData.new()
 		data.generate_identity()
 	
 	_ensure_dev_label_exists()
+	_anim_player = _find_animation_player(self)
 	
 	# Чтение параметров скорости из конфигурационных файлов (.ini)
 	if ConfigLoader:
@@ -78,6 +81,7 @@ func _physics_process(delta: float) -> void:
 	if is_being_dragged:
 		velocity = Vector3.ZERO
 		current_state = State.CARRIED
+		_update_animation()
 		_update_dev_ui()
 		return
 
@@ -91,18 +95,15 @@ func _physics_process(delta: float) -> void:
 			_stop_horizontal_movement(delta)
 			_process_idle_behavior(delta)
 			move_and_slide()
-
 		State.CARRIED:
 			_stop_horizontal_movement(delta)
 			move_and_slide()
-
 		State.MOVING:
 			if not is_on_floor():
 				_process_arc_drop_movement(delta)
 				move_and_slide()
 			else:
 				_process_nav_movement(delta)
-
 		State.GATHERING:
 			if not is_on_floor():
 				_process_arc_drop_movement(delta)
@@ -112,7 +113,6 @@ func _physics_process(delta: float) -> void:
 				_rotate_towards_target(target_berries, delta)
 				_process_gathering(delta)
 				move_and_slide()
-
 		State.DELIVERING:
 			if not is_on_floor():
 				_process_arc_drop_movement(delta)
@@ -124,7 +124,6 @@ func _physics_process(delta: float) -> void:
 				move_and_slide()
 			else:
 				_process_nav_movement(delta)
-
 		State.CLEARING:
 			if not is_on_floor():
 				_process_arc_drop_movement(delta)
@@ -135,10 +134,47 @@ func _physics_process(delta: float) -> void:
 				_process_clearing(delta)
 				move_and_slide()
 
+	_update_animation()
 	_update_dev_ui()
 
-# --- ПОВЕДЕНИЕ В IDLE (АВТОМАТИЧЕСКИЙ ВОЗВРАТ К РАБОТЕ) ---
+# --- УПРАВЛЕНИЕ АНИМАЦИЕЙ ---
+func _update_animation() -> void:
+	if not _anim_player or not is_instance_valid(_anim_player):
+		_anim_player = _find_animation_player(self)
+	if not _anim_player or not is_instance_valid(_anim_player):
+		return
 
+	var target_anim: String = "idle"
+	match current_state:
+		State.IDLE, State.CARRIED:
+			target_anim = "idle"
+		State.MOVING:
+			target_anim = "walk"
+		State.GATHERING, State.CLEARING:
+			target_anim = "work"
+		State.DELIVERING:
+			if _is_unloading_at_storage:
+				target_anim = "work"
+			else:
+				target_anim = "walk"
+
+	if _anim_player.has_animation(target_anim):
+		if _anim_player.current_animation != target_anim:
+			_anim_player.play(target_anim)
+
+func _find_animation_player(node: Node) -> AnimationPlayer:
+	if not node:
+		return null
+	var ap = node.get_node_or_null("AnimationPlayer") as AnimationPlayer
+	if ap:
+		return ap
+	for child in node.get_children():
+		var found = _find_animation_player(child)
+		if found:
+			return found
+	return null
+
+# --- ПОВЕДЕНИЕ В IDLE (АВТОМАТИЧЕСКИЙ ВОЗВРАТ К РАБОТЕ) ---
 func _process_idle_behavior(delta: float) -> void:
 	# 1. Если руки не пусты — несем на ближайший склад
 	if data and data.item_amount > 0:
@@ -158,7 +194,6 @@ func _process_idle_behavior(delta: float) -> void:
 				start_gathering_at_berries(target_berries)
 
 # --- ЛОГИКА ДВИЖЕНИЯ И AVOIDANCE ---
-
 ## Движение по горизонтали XZ к точке WorkPoint во время спуска с воздуха (Context Drop)
 func _process_arc_drop_movement(delta: float) -> void:
 	var pos_xz = Vector2(global_position.x, global_position.z)
@@ -196,15 +231,14 @@ func _process_nav_movement(delta: float) -> void:
 		var move_dir = dir.normalized()
 		var target_vel_x = move_dir.x * speed
 		var target_vel_z = move_dir.z * speed
-		
+
 		var step_len = Vector2(target_vel_x * delta, target_vel_z * delta).length()
 		if step_len > max_step_distance and delta > 0.0:
 			var cap_factor = max_step_distance / step_len
 			target_vel_x *= cap_factor
 			target_vel_z *= cap_factor
-		
-		var intended_velocity = Vector3(target_vel_x, velocity.y, target_vel_z)
 
+		var intended_velocity = Vector3(target_vel_x, velocity.y, target_vel_z)
 		if nav_agent.avoidance_enabled:
 			nav_agent.set_velocity(intended_velocity)
 		else:
@@ -225,12 +259,12 @@ func _on_safe_velocity_computed(safe_velocity: Vector3) -> void:
 	if current_state == State.MOVING or (current_state == State.DELIVERING and not _is_unloading_at_storage):
 		velocity.x = safe_velocity.x
 		velocity.z = safe_velocity.z
-		
+
 		var vel_2d = Vector2(safe_velocity.x, safe_velocity.z)
 		if vel_2d.length_squared() > 0.01:
 			var target_angle = atan2(-vel_2d.x, -vel_2d.y)
 			rotation.y = lerp_angle(rotation.y, target_angle, rotation_speed * get_physics_process_delta_time())
-			
+
 		move_and_slide()
 
 ## Разворот лицом к целевому объекту
@@ -262,7 +296,6 @@ func _stop_horizontal_movement(delta: float) -> void:
 	velocity.z = move_toward(velocity.z, 0.0, speed * delta * 10.0)
 
 # --- РАБОЧИЕ ПРОЦЕССЫ ---
-
 func _process_gathering(delta: float) -> void:
 	if not target_berries or not is_instance_valid(target_berries):
 		current_state = State.IDLE
@@ -335,7 +368,6 @@ func _process_clearing(delta: float) -> void:
 		target_obstacle = null
 
 # --- КОМАНДЫ И ВЗАИМОДЕЙСТВИЕ ---
-
 func move_to_position(target_pos: Vector3) -> void:
 	is_being_dragged = false
 	_is_unloading_at_storage = false
@@ -344,7 +376,7 @@ func move_to_position(target_pos: Vector3) -> void:
 	target_obstacle = null
 	_current_target_pos = target_pos
 	current_state = State.MOVING
-	if is_on_floor() and nav_agent:
+	if nav_agent:
 		nav_agent.target_position = target_pos
 
 func start_gathering_at_berries(berries_node: Node3D) -> void:
@@ -354,7 +386,7 @@ func start_gathering_at_berries(berries_node: Node3D) -> void:
 	target_obstacle = null
 	_work_timer = 0.0
 	_current_target_pos = _get_free_work_point_safe(berries_node)
-	
+
 	if not is_on_floor():
 		current_state = State.GATHERING
 	else:
@@ -373,9 +405,9 @@ func start_delivering_to_storage(storage_node: Node3D) -> void:
 	target_obstacle = null
 	_work_timer = 0.0
 	_current_target_pos = _get_free_work_point_safe(storage_node)
-	
+
 	current_state = State.DELIVERING
-	
+
 	if not is_on_floor():
 		_is_unloading_at_storage = true
 	else:
@@ -390,7 +422,7 @@ func start_clearing_obstacle(obstacle_node: Node3D) -> void:
 	target_berries = null
 	_work_timer = 0.0
 	_current_target_pos = _get_free_work_point_safe(obstacle_node)
-	
+
 	if not is_on_floor():
 		current_state = State.CLEARING
 	else:
@@ -410,7 +442,7 @@ func _go_to_nearest_storage() -> void:
 		if not nearest_storage:
 			current_state = State.IDLE
 			return
-			
+
 		var min_dist: float = global_position.distance_to(nearest_storage.global_position)
 		for s in storages:
 			var node_s = s as Node3D
@@ -419,7 +451,7 @@ func _go_to_nearest_storage() -> void:
 				if dist < min_dist:
 					min_dist = dist
 					nearest_storage = node_s
-						
+
 		start_delivering_to_storage(nearest_storage)
 	else:
 		print("[Character] No storage found in group 'storage'!")
@@ -432,7 +464,7 @@ func _deposit_food_to_storage() -> void:
 			data.carried_item = ""
 			data.item_amount = 0
 			print("[Character] Deposited berries to storage.")
-		
+
 		if target_berries and is_instance_valid(target_berries):
 			var still_has: bool = true
 			if target_berries.has_method("has_berries"):
@@ -440,7 +472,7 @@ func _deposit_food_to_storage() -> void:
 			if still_has:
 				start_gathering_at_berries(target_berries)
 				return
-		
+
 		current_state = State.IDLE
 
 func _get_free_work_point_safe(node: Node3D) -> Vector3:
@@ -448,14 +480,14 @@ func _get_free_work_point_safe(node: Node3D) -> Vector3:
 		return global_position
 	if not node.has_method("get_free_work_point"):
 		return node.global_position
-		
+
 	for method in node.get_method_list():
 		if method["name"] == "get_free_work_point":
 			if method["args"].size() == 0:
 				return node.get_free_work_point()
 			else:
 				return node.get_free_work_point(self)
-				
+
 	return node.global_position
 
 func set_selected(selected: bool) -> void:
@@ -483,17 +515,17 @@ func _ensure_dev_label_exists() -> void:
 func _update_dev_ui() -> void:
 	if not dev_label or not data:
 		return
-		
+
 	var gender_str = "M" if data.gender == CharacterData.Gender.MALE else "F"
 	var state_str = State.keys()[current_state]
 	if current_state == State.DELIVERING and _is_unloading_at_storage:
 		state_str = "UNLOADING"
-	
+
 	var talent_str = data.talent.capitalize() if "talent" in data else "None"
 	var forager_lvl = 0
 	if "skills" in data and data.skills.has("forager"):
 		forager_lvl = data.skills["forager"].get("level", 0)
-		
+
 	var text_info = "%s (%s) [%s]%s\n" % [data.character_name, gender_str, state_str, " *SEL*" if is_selected else ""]
 	text_info += "Talent: %s | Forager Lvl: %d\n" % [talent_str, forager_lvl]
 	text_info += "Age: %d yr | HP: %.0f\n" % [data.age, data.health]
@@ -504,5 +536,5 @@ func _update_dev_ui() -> void:
 		work_speed
 	]
 	text_info += "Vel: %.1f m/s" % velocity.length()
-	
+
 	dev_label.text = text_info

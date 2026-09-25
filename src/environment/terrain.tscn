@@ -25,10 +25,10 @@ navigation_mesh = SubResource("NavigationMesh_csncc")
 
 [node name="terrain00" parent="NavigationRegion3D" unique_id=1370467276 instance=ExtResource("2_avahw")]
 
-[node name="StaticBody3D" type="StaticBody3D" parent="NavigationRegion3D/terrain00/Terrain_001" parent_id_path=PackedInt32Array(1370467276, 284965455) index="0" unique_id=1084965910]
+[node name="StaticBody3D" type="StaticBody3D" parent="NavigationRegion3D" unique_id=1084965910]
 collision_mask = 0
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="NavigationRegion3D/terrain00/Terrain_001/StaticBody3D" unique_id=1569817416]
+[node name="CollisionShape3D" type="CollisionShape3D" parent="NavigationRegion3D/StaticBody3D" unique_id=1569817416]
 shape = SubResource("ConcavePolygonShape3D_ucpde")
 
 [editable path="sea"]
