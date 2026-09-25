@@ -1,8 +1,9 @@
 # ==============================================================================
 # ФАЙЛ: src/characters/Character.gd
-# НАЗНАЧЕНИЕ: Контроллер персонажа с опусканием по дуге на WorkPoint при Context Drop
-#            (куст, склад, завал), навигацией по земле с RVO2 Avoidance и считыванием
-#            скорости (move_speed, work_speed) из конфигураций.
+# НАЗНАЧЕНИЕ: Контроллер персонажа с зафиксированным инпутом, считыванием .ini
+#            (move_speed, work_speed), поддержкой RVO2 Avoidance для обхода
+#            NavigationObstacle3D, спуском по дуге при Context Drop и
+#            непрерывным рабочим циклом фуражира.
 # ==============================================================================
 extends CharacterBody3D
 
@@ -13,7 +14,7 @@ enum State { IDLE, MOVING, CARRIED, GATHERING, DELIVERING, CLEARING, EATING }
 @export var data: CharacterData
 
 @export_group("Movement Settings")
-@export var speed: float = 1.0
+@export var speed: float = 5.0
 @export var rotation_speed: float = 10.0
 @export var max_step_distance: float = 0.3
 
@@ -36,6 +37,7 @@ var target_obstacle: Node3D = null
 
 var _current_target_pos: Vector3 = Vector3.ZERO
 var _work_timer: float = 0.0
+var _idle_check_timer: float = 0.0
 var _is_unloading_at_storage: bool = false
 
 var work_speed: float = 1.0
@@ -46,7 +48,9 @@ func _ready() -> void:
 		data = CharacterData.new()
 		data.generate_identity()
 	
-	# Чтение move_speed и work_speed из character.ini
+	_ensure_dev_label_exists()
+	
+	# Чтение параметров скорости из конфигурационных файлов (.ini)
 	if ConfigLoader:
 		if ConfigLoader.has_method("get_character_value"):
 			speed = float(ConfigLoader.get_character_value("base_stats", "move_speed", speed))
@@ -55,7 +59,7 @@ func _ready() -> void:
 			speed = float(ConfigLoader.get_value("base_stats", "move_speed", speed))
 			work_speed = float(ConfigLoader.get_value("base_stats", "work_speed", work_speed))
 
-	# Настройка агента навигации и RVO2 Avoidance для обхода препятствий
+	# Настройка агента и подключение RVO2 Avoidance
 	if nav_agent:
 		nav_agent.target_desired_distance = 0.4
 		nav_agent.path_desired_distance = 0.5
@@ -77,13 +81,18 @@ func _physics_process(delta: float) -> void:
 		_update_dev_ui()
 		return
 
-	# 2. Гравитация (работает всегда в воздухе)
+	# 2. Гравитация
 	if not is_on_floor():
 		velocity.y -= gravity * delta
 
 	# 3. Машина состояний (FSM)
 	match current_state:
-		State.IDLE, State.CARRIED:
+		State.IDLE:
+			_stop_horizontal_movement(delta)
+			_process_idle_behavior(delta)
+			move_and_slide()
+
+		State.CARRIED:
 			_stop_horizontal_movement(delta)
 			move_and_slide()
 
@@ -128,7 +137,27 @@ func _physics_process(delta: float) -> void:
 
 	_update_dev_ui()
 
-# --- ДВИЖЕНИЕ И RVO2 AVOIDANCE ---
+# --- ПОВЕДЕНИЕ В IDLE (АВТОМАТИЧЕСКИЙ ВОЗВРАТ К РАБОТЕ) ---
+
+func _process_idle_behavior(delta: float) -> void:
+	# 1. Если руки не пусты — несем на ближайший склад
+	if data and data.item_amount > 0:
+		_go_to_nearest_storage()
+		return
+
+	# 2. Проверка созревания ягод каждые 0.5 сек для запомненного куста
+	if target_berries and is_instance_valid(target_berries):
+		_idle_check_timer += delta
+		if _idle_check_timer >= 0.5:
+			_idle_check_timer = 0.0
+			var berries_ready: bool = false
+			if target_berries.has_method("has_berries"):
+				berries_ready = target_berries.has_berries()
+			if berries_ready:
+				print("[Character] %s noticed berries ripened! Returning to work..." % data.character_name)
+				start_gathering_at_berries(target_berries)
+
+# --- ЛОГИКА ДВИЖЕНИЯ И AVOIDANCE ---
 
 ## Движение по горизонтали XZ к точке WorkPoint во время спуска с воздуха (Context Drop)
 func _process_arc_drop_movement(delta: float) -> void:
@@ -139,9 +168,8 @@ func _process_arc_drop_movement(delta: float) -> void:
 
 	if dist > 0.05:
 		var move_dir = dir_xz.normalized()
-		var drop_speed = max(speed, 2.0) * 1.2
-		velocity.x = move_dir.x * drop_speed
-		velocity.z = move_dir.y * drop_speed
+		velocity.x = move_dir.x * max(speed, 3.0) * 1.2
+		velocity.z = move_dir.y * max(speed, 3.0) * 1.2
 	else:
 		global_position.x = _current_target_pos.x
 		global_position.z = _current_target_pos.z
@@ -169,7 +197,6 @@ func _process_nav_movement(delta: float) -> void:
 		var target_vel_x = move_dir.x * speed
 		var target_vel_z = move_dir.z * speed
 		
-		# Кап длины шага для высокого time_scale
 		var step_len = Vector2(target_vel_x * delta, target_vel_z * delta).length()
 		if step_len > max_step_distance and delta > 0.0:
 			var cap_factor = max_step_distance / step_len
@@ -191,7 +218,7 @@ func _process_nav_movement(delta: float) -> void:
 		_on_movement_finished()
 		move_and_slide()
 
-## Колбэк RVO Avoidance от навигационного сервера Godot для безаварийного обхода препятствий
+## Колбэк RVO Avoidance от навигационного сервера Godot
 func _on_safe_velocity_computed(safe_velocity: Vector3) -> void:
 	if is_being_dragged or not is_on_floor():
 		return
@@ -214,12 +241,7 @@ func _rotate_towards_target(target_node: Node3D, delta: float) -> void:
 	dir.y = 0.0
 	if dir.length_squared() > 0.001:
 		var target_angle = atan2(-dir.x, -dir.z)
-		var angle_diff = abs(angle_difference(rotation.y, target_angle))
-		if angle_diff > 0.03:
-			var lerp_weight = clamp(rotation_speed * delta * 2.0, 0.0, 1.0)
-			rotation.y = lerp_angle(rotation.y, target_angle, lerp_weight)
-		else:
-			rotation.y = target_angle
+		rotation.y = lerp_angle(rotation.y, target_angle, rotation_speed * delta)
 
 func _on_movement_finished() -> void:
 	if current_state == State.MOVING:
@@ -239,12 +261,11 @@ func _stop_horizontal_movement(delta: float) -> void:
 	velocity.x = move_toward(velocity.x, 0.0, speed * delta * 10.0)
 	velocity.z = move_toward(velocity.z, 0.0, speed * delta * 10.0)
 
-# --- РАБОЧИЕ ПРОЦЕССЫ С УЧЁТОМ НАВЫКОВ И ТАЛАНТОВ ---
+# --- РАБОЧИЕ ПРОЦЕССЫ ---
 
 func _process_gathering(delta: float) -> void:
 	if not target_berries or not is_instance_valid(target_berries):
 		current_state = State.IDLE
-		target_berries = null
 		return
 
 	var berries_available: bool = true
@@ -253,25 +274,27 @@ func _process_gathering(delta: float) -> void:
 
 	if not berries_available or not target_berries.has_method("harvest_berry"):
 		current_state = State.IDLE
-		target_berries = null
 		return
 
 	var required_time: float = default_gather_time
 	if target_berries.has_method("get_work_time"):
 		required_time = target_berries.get_work_time()
 
-	# Эффективная скорость работы с учётом таланта и навыка "forager"
-	var effective_speed: float = work_speed
+	# Расчет скорости работы с учетом врожденного таланта и навыка персонажа
+	var current_work_speed: float = work_speed
 	if data and data.has_method("get_effective_work_speed"):
-		effective_speed = data.get_effective_work_speed("forager")
+		var skill_key: String = "forager"
+		if "skill" in target_berries:
+			skill_key = target_berries.skill
+		current_work_speed = data.get_effective_work_speed(skill_key)
 
-	_work_timer += delta * effective_speed
+	_work_timer += delta * current_work_speed
 	if _work_timer >= required_time:
 		_work_timer = 0.0
 		if target_berries.harvest_berry():
-			if data:
-				data.carried_item = "berry"
-				data.item_amount = 1
+			data.carried_item = "berry"
+			data.item_amount = 1
+			if data.has_method("add_skill_exp"):
 				data.add_skill_exp("forager", 10.0)
 			print("[Character] Harvested 1 berry! Heading to storage...")
 			_go_to_nearest_storage()
@@ -286,17 +309,10 @@ func _process_delivering_unload(delta: float) -> void:
 	if target_storage.has_method("get_work_time"):
 		required_time = target_storage.get_work_time()
 
-	# Эффективная скорость разгрузки с учётом навыка "trader"
-	var effective_speed: float = work_speed
-	if data and data.has_method("get_effective_work_speed"):
-		effective_speed = data.get_effective_work_speed("trader")
-
-	_work_timer += delta * effective_speed
+	_work_timer += delta * work_speed
 	if _work_timer >= required_time:
 		_work_timer = 0.0
 		_is_unloading_at_storage = false
-		if data:
-			data.add_skill_exp("trader", 10.0)
 		_deposit_food_to_storage()
 
 func _process_clearing(delta: float) -> void:
@@ -309,18 +325,11 @@ func _process_clearing(delta: float) -> void:
 	if target_obstacle.has_method("get_work_time"):
 		required_time = target_obstacle.get_work_time()
 
-	# Эффективная скорость расчистки с учётом навыка "worker"
-	var effective_speed: float = work_speed
-	if data and data.has_method("get_effective_work_speed"):
-		effective_speed = data.get_effective_work_speed("worker")
-
-	_work_timer += delta * effective_speed
+	_work_timer += delta * work_speed
 	if _work_timer >= required_time:
 		_work_timer = 0.0
 		if target_obstacle.has_method("clear_obstacle"):
 			target_obstacle.clear_obstacle()
-		if data:
-			data.add_skill_exp("worker", 10.0)
 		print("[Character] Cleared obstacle!")
 		current_state = State.IDLE
 		target_obstacle = null
@@ -410,7 +419,7 @@ func _go_to_nearest_storage() -> void:
 				if dist < min_dist:
 					min_dist = dist
 					nearest_storage = node_s
-					
+						
 		start_delivering_to_storage(nearest_storage)
 	else:
 		print("[Character] No storage found in group 'storage'!")
@@ -418,7 +427,7 @@ func _go_to_nearest_storage() -> void:
 
 func _deposit_food_to_storage() -> void:
 	if target_storage and is_instance_valid(target_storage) and target_storage.has_method("deposit_food"):
-		if data and data.item_amount > 0:
+		if data.item_amount > 0:
 			target_storage.deposit_food(data.item_amount)
 			data.carried_item = ""
 			data.item_amount = 0
@@ -457,6 +466,20 @@ func set_selected(selected: bool) -> void:
 func _on_year_passed(_year: int) -> void:
 	_update_dev_ui()
 
+func _ensure_dev_label_exists() -> void:
+	if not dev_label:
+		dev_label = get_node_or_null("DevLabel") as Label3D
+	if not dev_label:
+		dev_label = Label3D.new()
+		dev_label.name = "DevLabel"
+		dev_label.position = Vector3(0, 2.2, 0)
+		dev_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		dev_label.no_depth_test = true
+		dev_label.pixel_size = 0.005
+		dev_label.modulate = Color(1.0, 1.0, 1.0)
+		add_child(dev_label)
+	dev_label.visible = true
+
 func _update_dev_ui() -> void:
 	if not dev_label or not data:
 		return
@@ -466,13 +489,20 @@ func _update_dev_ui() -> void:
 	if current_state == State.DELIVERING and _is_unloading_at_storage:
 		state_str = "UNLOADING"
 	
-	var talent_str = data.talent.capitalize() if data.talent != "" else "None"
-	var forager_lvl = data.skills.get("forager", {}).get("level", 0) if data.skills else 0
-	
+	var talent_str = data.talent.capitalize() if "talent" in data else "None"
+	var forager_lvl = 0
+	if "skills" in data and data.skills.has("forager"):
+		forager_lvl = data.skills["forager"].get("level", 0)
+		
 	var text_info = "%s (%s) [%s]%s\n" % [data.character_name, gender_str, state_str, " *SEL*" if is_selected else ""]
-	text_info += "Age: %d yr | HP: %.0f\n" % [data.age, data.health]
 	text_info += "Talent: %s | Forager Lvl: %d\n" % [talent_str, forager_lvl]
-	text_info += "CfgMoveSpd: %.1f m/s | Vel: %.1f m/s\n" % [speed, velocity.length()]
-	text_info += "Carrying: %s (%d)" % [data.carried_item if data.carried_item != "" else "None", data.item_amount]
+	text_info += "Age: %d yr | HP: %.0f\n" % [data.age, data.health]
+	text_info += "Carrying: %s (%d) | Spd: %.1f | WSpd: %.1f\n" % [
+		data.carried_item if data.carried_item != "" else "None",
+		data.item_amount,
+		speed,
+		work_speed
+	]
+	text_info += "Vel: %.1f m/s" % velocity.length()
 	
 	dev_label.text = text_info

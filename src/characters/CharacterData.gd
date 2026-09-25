@@ -104,8 +104,9 @@ func load_all_stats_from_config() -> void:
 
 ## Подписка на глобальные события времени
 func _connect_time_signals() -> void:
-	if Engine.has_singleton("TimeManager") or Node.new().get_node_or_null("/root/TimeManager") != null:
-		var tm = Node.new().get_node_or_null("/root/TimeManager")
+	var main_loop = Engine.get_main_loop()
+	if main_loop is SceneTree and main_loop.root:
+		var tm = main_loop.root.get_node_or_null("TimeManager")
 		if tm:
 			if tm.has_signal("day_passed") and not tm.day_passed.is_connected(_on_day_passed):
 				tm.day_passed.connect(_on_day_passed)

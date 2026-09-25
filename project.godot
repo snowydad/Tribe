@@ -19,6 +19,7 @@ config/icon="res://icon.svg"
 ConfigLoader="*uid://1yunn01ao50v"
 DevCheatManager="*uid://cyyn702h7flht"
 TimeManager="*uid://bbkaa3ab46oxc"
+LoggerGlobal="*uid://b11kfwdjy08bs"
 
 [display]
 

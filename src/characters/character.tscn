@@ -28,13 +28,53 @@ emission_energy_multiplier = 16.0
 [sub_resource type="TorusMesh" id="TorusMesh_j07er"]
 inner_radius = 0.8
 
+[sub_resource type="Animation" id="Animation_5iv74"]
+length = 0.001
+tracks/0/type = "rotation_3d"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath("MeshInstance3D")
+tracks/0/interp = 1
+tracks/0/loop_wrap = true
+tracks/0/keys = PackedFloat32Array(0, 1, 0, 0, 0, 1)
+
+[sub_resource type="Animation" id="Animation_rxhcr"]
+resource_name = "idle"
+loop_mode = 1
+tracks/0/type = "rotation_3d"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath("MeshInstance3D")
+tracks/0/interp = 1
+tracks/0/loop_wrap = true
+tracks/0/keys = PackedFloat32Array(0, 1, 0, 0, 0, 1, 0.23333333, 1, 0, 0, 0.026176948, 0.9996573, 0.72636104, 1, 0, 0, -0.026176948, 0.9996573, 1, 1, 0, 0, 0, 0.99999994)
+
+[sub_resource type="Animation" id="Animation_o43y5"]
+resource_name = "walk"
+length = 0.5
+loop_mode = 1
+tracks/0/type = "position_3d"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath("MeshInstance3D")
+tracks/0/interp = 1
+tracks/0/loop_wrap = true
+tracks/0/keys = PackedFloat32Array(0, 1, 0, 0, 0, 0.3, 1, 0, 0.1, 0)
+
+[sub_resource type="AnimationLibrary" id="AnimationLibrary_o43y5"]
+_data = {
+&"RESET": SubResource("Animation_5iv74"),
+&"idle": SubResource("Animation_rxhcr"),
+&"walk": SubResource("Animation_o43y5")
+}
+
 [node name="Character" type="CharacterBody3D" unique_id=682575563]
 collision_layer = 2
 collision_mask = 5
 script = ExtResource("1_5iv74")
-speed = 1.0
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="." unique_id=1434398887]
+transform = Transform3D(0.9999999, 0, 0, 0, 0.9999999, 0, 0, 0, 1, 0, 0.08361112, 0)
 mesh = SubResource("BoxMesh_j07er")
 
 [node name="Face" type="MeshInstance3D" parent="." unique_id=1902912857]
@@ -68,3 +108,7 @@ visible = false
 material_override = SubResource("StandardMaterial3D_5iv74")
 cast_shadow = 0
 mesh = SubResource("TorusMesh_j07er")
+
+[node name="AnimationPlayer" type="AnimationPlayer" parent="." unique_id=245341715]
+libraries/ = SubResource("AnimationLibrary_o43y5")
+autoplay = &"idle"
