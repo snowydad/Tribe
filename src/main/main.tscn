@@ -102,6 +102,7 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6.352808, 1.2753301, 14)
 
 [node name="Berries" parent="." unique_id=891666075 instance=ExtResource("9_2nke2")]
 transform = Transform3D(1, 2.4796464e-08, 0, 9.022187e-09, 1.0000001, 2.3283064e-09, 1.4901161e-08, 1.0244548e-08, 1.0000001, 4.39073, 1.3461447, 16.559986)
+max_berries = 5
 
 [node name="DevObstacle" parent="." unique_id=1725071813 instance=ExtResource("10_km7bn")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.93157995, 1.259217, 9.068602)

@@ -1,15 +1,32 @@
 # ==============================================================================
 # ФАЙЛ: src/autoload/ConfigLoader.gd
 # НАЗНАЧЕНИЕ: Глобальный синглтон для чтения конфигурационных .ini файлов проекта.
-#             Предоставляет специализированные и универсальный (get_value) методы.
+#             Поддерживает автозагрузку всех конфигов из assets/config/,
+#             универсальный метод get_config_value(config_name, section, key),
+#             а также сохраняет полную обратную совместимость со всеми старыми геттерами.
 # ==============================================================================
 extends Node
 
-const CHARACTER_CONFIG_PATH: String = "res://assets/config/character.ini"
-const SKILLS_CONFIG_PATH: String = "res://assets/config/character_skills.ini"
-const GAME_CONFIG_PATH: String = "res://assets/config/game_config.ini"
-const BERRIES_CONFIG_PATH: String = "res://assets/config/berries.ini"
+const CONFIG_DIR_PATH: String = "res://assets/config/"
 
+## Словарь всех загруженных файлов: { "character": ConfigFile, "storage": ConfigFile, ... }
+var _configs: Dictionary = {}
+
+## Псевдонимы имён конфигов для гибкого поиска
+var _aliases: Dictionary = {
+	"skills": "character_skills",
+	"character_skills": "character_skills",
+	"character": "character",
+	"game": "game_config",
+	"game_config": "game_config",
+	"berries": "berries",
+	"storage": "storage",
+	"obstacle": "obstacle",
+	"shelter": "shelter",
+	"names": "names"
+}
+
+# Ссылки для 100% обратной совместимости
 var _character_config: ConfigFile = ConfigFile.new()
 var _skills_config: ConfigFile = ConfigFile.new()
 var _game_config: ConfigFile = ConfigFile.new()
@@ -20,42 +37,133 @@ func _ready() -> void:
 
 ## Загружает или перезагружает все текстовые .ini конфигурации
 func load_all_configs() -> void:
-	_load_single_config(_character_config, CHARACTER_CONFIG_PATH, "Character")
-	_load_single_config(_skills_config, SKILLS_CONFIG_PATH, "Skills")
-	_load_single_config(_game_config, GAME_CONFIG_PATH, "Game")
-	_load_single_config(_berries_config, BERRIES_CONFIG_PATH, "Berries")
+	_configs.clear()
 
-func _load_single_config(config_file: ConfigFile, path: String, config_name: String) -> void:
+	# 1. Автоматическое сканирование директории assets/config/
+	var dir = DirAccess.open(CONFIG_DIR_PATH)
+	if dir:
+		for file_name in dir.get_files():
+			if file_name.ends_with(".ini"):
+				var cfg_key = file_name.get_basename().to_lower()
+				var full_path = CONFIG_DIR_PATH.path_join(file_name)
+				_load_single_config(cfg_key, full_path)
+	else:
+		push_warning("[ConfigLoader] Cannot open config directory: %s" % CONFIG_DIR_PATH)
+
+	# 2. Гарантированная загрузка базовых конфигов (включая экспортные сборки)
+	var fallback_configs = {
+		"character": "res://assets/config/character.ini",
+		"character_skills": "res://assets/config/character_skills.ini",
+		"game_config": "res://assets/config/game_config.ini",
+		"berries": "res://assets/config/berries.ini",
+		"storage": "res://assets/config/storage.ini",
+		"obstacle": "res://assets/config/obstacle.ini",
+		"shelter": "res://assets/config/shelter.ini",
+		"names": "res://assets/config/names.ini"
+	}
+	for cfg_name in fallback_configs.keys():
+		if not _configs.has(cfg_name):
+			_load_single_config(cfg_name, fallback_configs[cfg_name])
+
+	# 3. Синхронизация старых ссылок для обратной совместимости
+	_character_config = _configs.get("character", ConfigFile.new())
+	_skills_config = _configs.get("character_skills", ConfigFile.new())
+	_game_config = _configs.get("game_config", ConfigFile.new())
+	_berries_config = _configs.get("berries", ConfigFile.new())
+
+func _load_single_config(config_name: String, path: String) -> void:
+	if not FileAccess.file_exists(path):
+		return
+	var config_file = ConfigFile.new()
 	var err = config_file.load(path)
 	if err == OK:
+		_configs[config_name] = config_file
 		print("[ConfigLoader] %s config loaded successfully: %s" % [config_name, path])
 	else:
 		push_warning("[ConfigLoader] Failed to load %s config from %s (Error code: %d)" % [config_name, path, err])
 
-## Универсальный метод чтения параметров (используется в TimeManager.gd, Character.gd и др.)
-func get_value(section: String, key: String, default_value: Variant = null) -> Variant:
-	if _game_config.has_section_key(section, key):
-		return _game_config.get_value(section, key, default_value)
-	if _character_config.has_section_key(section, key):
-		return _character_config.get_value(section, key, default_value)
-	if _skills_config.has_section_key(section, key):
-		return _skills_config.get_value(section, key, default_value)
-	if _berries_config.has_section_key(section, key):
-		return _berries_config.get_value(section, key, default_value)
+## Нормализация имени конфига с учётом расширения и алиасов
+func _resolve_config_name(config_name: String) -> String:
+	var clean_name = config_name.strip_edges().to_lower()
+	if clean_name.ends_with(".ini"):
+		clean_name = clean_name.trim_suffix(".ini")
+	return _aliases.get(clean_name, clean_name)
+
+## Возвращает объект ConfigFile по имени конфига
+func get_config_file(config_name: String) -> ConfigFile:
+	var resolved = _resolve_config_name(config_name)
+	return _configs.get(resolved, null)
+
+## Проверяет существование секции и ключа в указанном конфиге
+func has_config_key(config_name: String, section: String, key: String) -> bool:
+	var cfg = get_config_file(config_name)
+	if cfg:
+		return cfg.has_section_key(section, key)
+	return false
+
+# ==============================================================================
+# ОСНОВНОЙ УНИВЕРСАЛЬНЫЙ API ЧТЕНИЯ
+# ==============================================================================
+
+## Универсальное безопасное чтение значения из конкретного .ini файла
+## Пример: ConfigLoader.get_config_value("storage", "work", "base_work_time", 1.0)
+func get_config_value(config_name: String, section: String, key: String, default_value: Variant = null) -> Variant:
+	var cfg = get_config_file(config_name)
+	if cfg and cfg.has_section_key(section, key):
+		return cfg.get_value(section, key, default_value)
 	return default_value
 
-## Безопасное получение значений из character.ini
+## Возвращает список всех секций конфига
+func get_sections(config_name: String) -> PackedStringArray:
+	var cfg = get_config_file(config_name)
+	if cfg:
+		return cfg.get_sections()
+	return PackedStringArray()
+
+## Возвращает список всех ключей заданной секции
+func get_section_keys(config_name: String, section: String) -> PackedStringArray:
+	var cfg = get_config_file(config_name)
+	if cfg and cfg.has_section(section):
+		return cfg.get_section_keys(section)
+	return PackedStringArray()
+
+# ==============================================================================
+# МЕТОДЫ ОБРАТНОЙ СОВМЕСТИМОСТИ И БЫСТРЫЕ ГЕТТЕРЫ
+# ==============================================================================
+
+## Универсальный метод сквозного поиска по базовым конфигам (для TimeManager и др.)
+func get_value(section: String, key: String, default_value: Variant = null) -> Variant:
+	var search_order = ["game_config", "character", "character_skills", "berries", "storage", "obstacle", "shelter"]
+	for cfg_name in search_order:
+		var cfg = get_config_file(cfg_name)
+		if cfg and cfg.has_section_key(section, key):
+			return cfg.get_value(section, key, default_value)
+	return default_value
+
+## Получение значений из character.ini
 func get_character_value(section: String, key: String, default_value: Variant = null) -> Variant:
-	return _character_config.get_value(section, key, default_value)
+	return get_config_value("character", section, key, default_value)
 
-## Безопасное получение значений из character_skills.ini
+## Получение значений из character_skills.ini
 func get_skill_value(section: String, key: String, default_value: Variant = null) -> Variant:
-	return _skills_config.get_value(section, key, default_value)
+	return get_config_value("character_skills", section, key, default_value)
 
-## Безопасное получение значений из game_config.ini
+## Получение значений из game_config.ini
 func get_game_value(section: String, key: String, default_value: Variant = null) -> Variant:
-	return _game_config.get_value(section, key, default_value)
+	return get_config_value("game_config", section, key, default_value)
 
-## Безопасное получение значений из berries.ini
+## Получение значений из berries.ini
 func get_berries_value(section: String, key: String, default_value: Variant = null) -> Variant:
-	return _berries_config.get_value(section, key, default_value)
+	return get_config_value("berries", section, key, default_value)
+
+## Получение значений из storage.ini
+func get_storage_value(section: String, key: String, default_value: Variant = null) -> Variant:
+	return get_config_value("storage", section, key, default_value)
+
+## Получение значений из obstacle.ini
+func get_obstacle_value(section: String, key: String, default_value: Variant = null) -> Variant:
+	return get_config_value("obstacle", section, key, default_value)
+
+## Получение значений из shelter.ini
+func get_shelter_value(section: String, key: String, default_value: Variant = null) -> Variant:
+	return get_config_value("shelter", section, key, default_value)
