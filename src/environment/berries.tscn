@@ -33,10 +33,21 @@ height = 0.1
 
 [node name="Berries" type="Node3D" unique_id=891666075]
 script = ExtResource("1_cyyvj")
-max_berries = 6
 ripening_time = 86400.0
 
 [node name="berries" parent="." unique_id=359153156 instance=ExtResource("2_jpmde")]
+
+[node name="Berry_008" parent="berries/Armature/Skeleton3D" parent_id_path=PackedInt32Array(359153156, 1360906931) index="1" unique_id=1646894171]
+transform = Transform3D(0.7863831, 7.916242e-09, 0.61773866, -1.3969839e-08, -0.99999964, 3.0733645e-08, 0.6177387, -3.2316798e-08, -0.7863831, 0.40184766, 0.47278857, -0.26709595)
+
+[node name="Berry_003" parent="berries/Armature/Skeleton3D" parent_id_path=PackedInt32Array(359153156, 1360906931) index="2" unique_id=1948261402]
+transform = Transform3D(0.3871181, -2.0023435e-08, 0.92203003, -3.7718564e-08, -0.9999998, -6.519258e-09, 0.9220299, -3.220093e-08, -0.3871182, 0.16953994, 0.806972, -0.434201)
+
+[node name="Berry_004" parent="berries/Armature/Skeleton3D" parent_id_path=PackedInt32Array(359153156, 1360906931) index="4" unique_id=458000664]
+transform = Transform3D(0.70027876, -1.9557774e-08, -0.71386915, 7.916242e-09, -0.9999996, 3.655441e-08, -0.7138691, -3.1269593e-08, -0.70027876, -0.34981287, 0.78703666, -0.2537058)
+
+[node name="AnimationPlayer" parent="berries" index="1" unique_id=637888149]
+autoplay = &"Wind-100"
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="." unique_id=1112722748]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5126747, 0)
@@ -75,6 +86,22 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0)
 [node name="Marker3D_W" type="Marker3D" parent="WorkPoints" unique_id=685941968]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1, 0, 0)
 
+[node name="Dev" type="MeshInstance3D" parent="WorkPoints" unique_id=538502338]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.14395672, 0.972072)
+mesh = SubResource("SphereMesh_csncc")
+
+[node name="Dev2" type="MeshInstance3D" parent="WorkPoints" unique_id=1453520382]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.0055866, 0.14395672, -0.007992446)
+mesh = SubResource("SphereMesh_csncc")
+
+[node name="Dev3" type="MeshInstance3D" parent="WorkPoints" unique_id=524894444]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.020418167, 0.14395672, -1.0084748)
+mesh = SubResource("SphereMesh_csncc")
+
+[node name="Dev4" type="MeshInstance3D" parent="WorkPoints" unique_id=1393035682]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.0055871, 0.14395672, 0.0022165775)
+mesh = SubResource("SphereMesh_csncc")
+
 [node name="DevLabel" type="Label3D" parent="." unique_id=1660290718]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.3506087, 0.49014282)
 billboard = 2
@@ -82,21 +109,5 @@ alpha_cut = 1
 
 [node name="NavigationObstacle3D" type="NavigationObstacle3D" parent="." unique_id=2080193549]
 radius = 0.4
-
-[node name="Dev" type="MeshInstance3D" parent="." unique_id=538502338]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.14395672, 0.972072)
-mesh = SubResource("SphereMesh_csncc")
-
-[node name="Dev2" type="MeshInstance3D" parent="." unique_id=1453520382]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.0055866, 0.14395672, -0.007992446)
-mesh = SubResource("SphereMesh_csncc")
-
-[node name="Dev3" type="MeshInstance3D" parent="." unique_id=524894444]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.020418167, 0.14395672, -1.0084748)
-mesh = SubResource("SphereMesh_csncc")
-
-[node name="Dev4" type="MeshInstance3D" parent="." unique_id=1393035682]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.0055871, 0.14395672, 0.0022165775)
-mesh = SubResource("SphereMesh_csncc")
 
 [editable path="berries"]

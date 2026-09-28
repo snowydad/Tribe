@@ -6,3 +6,7 @@ cull_mode = 2
 albedo_color = Color(0.9080197, 0, 0.302417, 1)
 metallic = 0.5590909
 roughness = 0.2090909
+subsurf_scatter_strength = 1.0
+subsurf_scatter_skin_mode = true
+backlight_enabled = true
+backlight = Color(0.55, 0, 0.2474999, 1)
