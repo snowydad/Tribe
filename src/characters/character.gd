@@ -245,17 +245,14 @@ func _process_idle_behavior(delta: float) -> void:
 					move_to_position(cur_task.target_pos)
 					return
 
-	# 4. Проверка созревания ягод каждые 0.5 сек для запомненного куста
+	# 4. WorkSite снова готов (созрел / освободился) — универсально, не только ягоды
 	if target_berries and is_instance_valid(target_berries):
 		_idle_check_timer += delta
 		if _idle_check_timer >= 0.5:
 			_idle_check_timer = 0.0
-			var berries_ready: bool = false
-			if target_berries.has_method("has_berries"):
-				berries_ready = target_berries.has_berries()
-			if berries_ready:
-				print("[Character] %s noticed berries ripened! Returning to work..." % data.character_name)
-				start_gathering_at_berries(target_berries)
+			if WorkSite.can_accept(target_berries, self):
+				print("[Character] %s: work site ready again, resuming..." % data.character_name)
+				start_work_at(target_berries)
 
 # --- ЛОГИКА ДВИЖЕНИЯ И AVOIDANCE ---
 
@@ -361,70 +358,51 @@ func _process_gathering(delta: float) -> void:
 		current_state = State.IDLE
 		return
 
-	var berries_available: bool = true
-	if target_berries.has_method("has_berries"):
-		berries_available = target_berries.has_berries()
-
-	if not berries_available or not target_berries.has_method("harvest_berry"):
+	# Готовность — у объекта (WorkSite), не has_berries в персе
+	if not WorkSite.can_accept(target_berries, self):
 		current_state = State.IDLE
-		# ПРИМЕЧАНИЕ: НЕ обнуляем target_berries, чтобы помнить куст на период созревания!
+		# target_berries помним — idle-поллер возобновит, когда can_accept снова true
 		return
 
-	var required_time: float = default_gather_time
-	if target_berries.has_method("get_work_time"):
-		required_time = target_berries.get_work_time()
-
+	var required_time: float = WorkSite.get_time(target_berries, default_gather_time)
+	var skill_key: String = WorkSite.get_skill(target_berries, "forager")
 	var current_work_speed: float = work_speed
 	if data and data.has_method("get_effective_work_speed"):
-		var skill_key: String = "forager"
-		if "skill" in target_berries:
-			skill_key = str(target_berries.skill)
 		current_work_speed = data.get_effective_work_speed(skill_key)
 
 	_work_timer += delta * current_work_speed
 	if _work_timer >= required_time:
 		_work_timer = 0.0
-		if target_berries.harvest_berry():
-			var item_type: String = "berry"
-			if target_berries.has_method("get_resource_type"):
-				item_type = target_berries.get_resource_type()
-			elif "resource_type" in target_berries:
-				item_type = str(target_berries.resource_type)
+		var result: Dictionary = WorkSite.do_work(target_berries, self)
+		if not result.get("ok", false):
+			current_state = State.IDLE
+			return
 
-			var amount: int = 1
-			if target_berries.has_method("get_yield_amount"):
-				amount = target_berries.get_yield_amount()
-			elif "yield_amount" in target_berries:
-				amount = int(target_berries.yield_amount)
+		# apply give
+		if result.has("give"):
+			var give: Dictionary = result["give"]
+			data.carried_item = str(give.get("item", "resource"))
+			data.item_amount = int(give.get("amount", 1))
 
-			data.carried_item = item_type
-			data.item_amount = amount
+		var xp_skill: String = str(result.get("xp_skill", skill_key))
+		var xp_per_cycle: float = WorkSite.xp_from_config()
+		if data.has_method("add_skill_xp"):
+			data.add_skill_xp(xp_skill, xp_per_cycle)
+		elif data.has_method("add_skill_exp"):
+			data.add_skill_exp(xp_skill, xp_per_cycle)
 
-			var xp_per_cycle: float = 10.0
-			if ConfigLoader:
-				if ConfigLoader.has_method("get_config_value"):
-					xp_per_cycle = float(ConfigLoader.get_config_value("skills", "skill_progression", "xp_per_work_cycle", 10.0))
-				elif ConfigLoader.has_method("get_skill_value"):
-					xp_per_cycle = float(ConfigLoader.get_skill_value("skill_progression", "xp_per_work_cycle", 10.0))
+		print("[Character] Work done at site: +%d %s" % [data.item_amount, data.carried_item])
 
-			if data.has_method("add_skill_xp"):
-				data.add_skill_xp("forager", xp_per_cycle)
-			elif data.has_method("add_skill_exp"):
-				data.add_skill_exp("forager", xp_per_cycle)
-
-			print("[Character] Harvested %d %s!" % [amount, item_type])
-
-			# Если персонаж проголодался (hunger >= 50%) — съедает сорванную ягоду на месте
-			if data.hunger >= 50.0:
-				print("[Character] %s is hungry (Hunger: %.1f%%). Eating harvested berry..." % [data.character_name, data.hunger])
-				if task_manager:
-					task_manager.push_subtask(TaskManager.Task.new(TaskManager.TaskType.EAT, Vector3.ZERO, null, 80))
-				start_eating()
-			else:
-				var nearest_st = _find_nearest_storage_node()
-				if task_manager and nearest_st:
-					task_manager.push_subtask(TaskManager.Task.new(TaskManager.TaskType.DELIVER, Vector3.ZERO, nearest_st, 60))
-				_go_to_nearest_storage()
+		if data.hunger >= 50.0 and data.item_amount > 0:
+			print("[Character] %s is hungry (Hunger: %.1f%%). Eating..." % [data.character_name, data.hunger])
+			if task_manager:
+				task_manager.push_subtask(TaskManager.Task.new(TaskManager.TaskType.EAT, Vector3.ZERO, null, 80))
+			start_eating()
+		else:
+			var nearest_st = _find_nearest_storage_node()
+			if task_manager and nearest_st:
+				task_manager.push_subtask(TaskManager.Task.new(TaskManager.TaskType.DELIVER, Vector3.ZERO, nearest_st, 60))
+			_go_to_nearest_storage()
 
 func start_eating() -> void:
 	_work_timer = 0.0
@@ -436,8 +414,11 @@ func _process_eating(delta: float) -> void:
 	if _work_timer >= req_eat_time:
 		_work_timer = 0.0
 		var nut_val: float = 25.0
-		if target_berries and is_instance_valid(target_berries) and target_berries.has_method("get_nutrition_value"):
-			nut_val = target_berries.get_nutrition_value()
+		if target_berries and is_instance_valid(target_berries):
+			if target_berries.has_method("get_nutrition_value"):
+				nut_val = float(target_berries.get_nutrition_value())
+			elif "nutrition_value" in target_berries:
+				nut_val = float(target_berries.nutrition_value)
 		data.eat_food(nut_val)
 		data.carried_item = ""
 		data.item_amount = 0
@@ -452,15 +433,10 @@ func _process_delivering_unload(delta: float) -> void:
 		current_state = State.IDLE
 		return
 
-	var required_time: float = default_deposit_time
-	if target_storage.has_method("get_work_time"):
-		required_time = target_storage.get_work_time()
-
+	var required_time: float = WorkSite.get_time(target_storage, default_deposit_time)
+	var skill_key: String = WorkSite.get_skill(target_storage, "trader")
 	var current_work_speed: float = work_speed
 	if data and data.has_method("get_effective_work_speed"):
-		var skill_key: String = "trader"
-		if "skill" in target_storage:
-			skill_key = str(target_storage.skill)
 		current_work_speed = data.get_effective_work_speed(skill_key)
 
 	_work_timer += delta * current_work_speed
@@ -539,6 +515,26 @@ func move_to_position(target_pos: Vector3) -> void:
 		task_manager.set_user_override_task(TaskManager.Task.new(TaskManager.TaskType.MOVE_TO, target_pos, null, 100))
 	if nav_agent:
 		nav_agent.target_position = target_pos
+
+## Универсальная точка входа: объект сам говорит, какой это тип работы (ini / WorkSite).
+func start_work_at(site: Node3D) -> void:
+	if not site or not is_instance_valid(site):
+		return
+	var category := WorkSite.get_category(site)
+	match category:
+		"harvest":
+			start_gathering_at_berries(site)
+		"deposit":
+			start_delivering_to_storage(site)
+		"clear":
+			start_clearing_obstacle(site)
+		"build":
+			# TODO: building FSM later
+			print("[Character] BUILD not implemented yet for %s" % site.name)
+			move_to_position(site.global_position)
+		_:
+			# fallback: work point walk
+			move_to_position(_get_free_work_point_safe(site))
 
 func start_gathering_at_berries(berries_node: Node3D) -> void:
 	_release_all_work_points()
@@ -638,48 +634,49 @@ func _go_to_nearest_storage() -> void:
 		current_state = State.IDLE
 
 func _deposit_food_to_storage() -> void:
-	if target_storage and is_instance_valid(target_storage) and target_storage.has_method("deposit_food"):
-		if data.item_amount > 0:
+	if not target_storage or not is_instance_valid(target_storage):
+		current_state = State.IDLE
+		return
+
+	if data.item_amount > 0:
+		var result: Dictionary
+		if WorkSite.is_site(target_storage):
+			result = WorkSite.do_work(target_storage, self)  # склад сам забирает груз
+		else:
+			# fallback legacy
 			var deposited_amount: int = data.item_amount
 			var carried_type: String = data.carried_item if data.carried_item != "" else "resource"
-			target_storage.deposit_food(data.item_amount)
+			if target_storage.has_method("deposit_food"):
+				target_storage.deposit_food(data.item_amount)
 			data.carried_item = ""
 			data.item_amount = 0
+			result = {"ok": true, "take": {"item": carried_type, "amount": deposited_amount}, "xp_skill": WorkSite.get_skill(target_storage, "trader")}
 
-			var xp_per_cycle: float = 10.0
-			if ConfigLoader:
-				if ConfigLoader.has_method("get_config_value"):
-					xp_per_cycle = float(ConfigLoader.get_config_value("skills", "skill_progression", "xp_per_work_cycle", 10.0))
-				elif ConfigLoader.has_method("get_skill_value"):
-					xp_per_cycle = float(ConfigLoader.get_skill_value("skill_progression", "xp_per_work_cycle", 10.0))
-
-			var skill_key: String = "trader"
-			if "skill" in target_storage:
-				skill_key = str(target_storage.skill)
-
+		if result.get("ok", false):
+			var xp_skill: String = str(result.get("xp_skill", WorkSite.get_skill(target_storage, "trader")))
+			var xp_per_cycle: float = WorkSite.xp_from_config()
 			if data.has_method("add_skill_xp"):
-				data.add_skill_xp(skill_key, xp_per_cycle)
+				data.add_skill_xp(xp_skill, xp_per_cycle)
 			elif data.has_method("add_skill_exp"):
-				data.add_skill_exp(skill_key, xp_per_cycle)
+				data.add_skill_exp(xp_skill, xp_per_cycle)
+			var take = result.get("take", {})
+			print("[Character] Deposited %s x%d" % [str(take.get("item", "?")), int(take.get("amount", 0))])
 
-			print("[Character] Deposited %d %s to storage." % [deposited_amount, carried_type])
+	if task_manager:
+		task_manager.complete_current_task()
 
-		if task_manager:
-			task_manager.complete_current_task()
+	# Вернуться к harvest-сайту, если он снова готов
+	if target_berries and is_instance_valid(target_berries):
+		if WorkSite.can_accept(target_berries, self):
+			start_work_at(target_berries)
+			return
+		# иначе ждём в IDLE, память о сайте сохранена
 
-		if target_berries and is_instance_valid(target_berries):
-			var still_has: bool = true
-			if target_berries.has_method("has_berries"):
-				still_has = target_berries.has_berries()
-			if still_has:
-				start_gathering_at_berries(target_berries)
-				return
+	if target_storage and is_instance_valid(target_storage):
+		if target_storage.has_method("release_work_point"):
+			target_storage.release_work_point(self)
 
-		if target_storage and is_instance_valid(target_storage):
-			if target_storage.has_method("release_work_point"):
-				target_storage.release_work_point(self)
-
-		current_state = State.IDLE
+	current_state = State.IDLE
 
 func _get_free_work_point_safe(node: Node3D) -> Vector3:
 	if not node or not is_instance_valid(node):
@@ -732,14 +729,17 @@ func _update_dev_ui() -> void:
 	if "skills" in data and data.skills.has("forager"):
 		forager_lvl = data.skills["forager"].get("level", 0)
 	
-	var text_info = "%s (%s) [%s]%s
-" % [data.character_name, gender_str, state_str, " *SEL*" if is_selected else ""]
-	text_info += "Talent: %s | Forager Lvl: %d
-" % [talent_str, forager_lvl]
-	text_info += "Age: %d yr | HP: %.0f | Hng: %.0f%%
-" % [data.age, data.health, data.hunger]
-	text_info += "Carrying: %s (%d) | Spd: %.1f | WSpd: %.1f
-" % [
+	var site_hint := "-"
+	if target_berries and is_instance_valid(target_berries):
+		site_hint = "H:" + WorkSite.get_type(target_berries)
+	elif target_storage and is_instance_valid(target_storage):
+		site_hint = "D:" + WorkSite.get_type(target_storage)
+
+	var text_info = "%s (%s) [%s]%s\n" % [data.character_name, gender_str, state_str, " *SEL*" if is_selected else ""]
+	text_info += "Site: %s\n" % site_hint
+	text_info += "Talent: %s | Forager Lvl: %d\n" % [talent_str, forager_lvl]
+	text_info += "Age: %d yr | HP: %.0f | Hng: %.0f%%\n" % [data.age, data.health, data.hunger]
+	text_info += "Carrying: %s (%d) | Spd: %.1f | WSpd: %.1f\n" % [
 		data.carried_item if data.carried_item != "" else "None",
 		data.item_amount,
 		speed,

@@ -180,15 +180,15 @@ Main                    ← main.gd (корень мира)
 
 ```
 Игрок бросает перса на куст
-        ↓
+		↓
 GATHERING ← work_time из berries.ini, скорость из CharacterData
-        ↓
+		↓
 harvest_berry() → руки berry
-        ↓
+		↓
 ближайший storage
-        ↓
+		↓
 deposit_food()
-        ↓
+		↓
 если куст не пуст → снова GATHERING, иначе IDLE (ждёт созревания)
 ```
 

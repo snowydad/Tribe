@@ -135,14 +135,20 @@ func _handle_character_drop(mouse_position: Vector2) -> void:
 func _find_interactable_node(collider: Node) -> Node3D:
 	if not collider:
 		return null
-	if collider.is_in_group("interactable") or collider.has_method("get_free_work_point"):
+	if collider.is_in_group("interactable") or collider.is_in_group("work_site") or collider.has_method("get_free_work_point") or collider.has_method("do_work"):
 		return collider as Node3D
-	if collider.get_parent() and (collider.get_parent().is_in_group("interactable") or collider.get_parent().has_method("get_free_work_point")):
-		return collider.get_parent() as Node3D
+	var p = collider.get_parent()
+	if p and (p.is_in_group("interactable") or p.is_in_group("work_site") or p.has_method("get_free_work_point") or p.has_method("do_work")):
+		return p as Node3D
 	return null
 
 ## Передача интерактивного узла персонажу
 func _assign_task_by_target(character: CharacterBody3D, target: Node3D) -> void:
+	# Предпочитаем универсальный WorkSite API
+	if character.has_method("start_work_at") and (WorkSite.is_site(target) or target.has_method("do_work") or target.has_method("get_free_work_point")):
+		character.start_work_at(target)
+		return
+	# Legacy fallback
 	if target.has_method("harvest_berry"):
 		character.start_gathering_at_berries(target)
 	elif target.has_method("clear_obstacle") or target.is_in_group("obstacle"):
