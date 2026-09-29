@@ -1,0 +1,23 @@
+[gd_resource type="StandardMaterial3D" format=3 uid="uid://m253fhpxo7bn"]
+
+[ext_resource type="Texture2D" uid="uid://siyn4ljkqcga" path="res://assets/materials/T_SeaNoise.tres" id="1_8f076"]
+
+[sub_resource type="NoiseTexture2D" id="NoiseTexture2D_iiywn"]
+
+[resource]
+resource_name = "M_Sea"
+transparency = 1
+cull_mode = 2
+depth_draw_mode = 1
+albedo_color = Color(0.12480002, 0.7035599, 0.78, 0.56078434)
+albedo_texture = ExtResource("1_8f076")
+metallic = 0.34
+roughness = 0.52
+normal_texture = SubResource("NoiseTexture2D_iiywn")
+clearcoat = 0.31
+clearcoat_roughness = 0.3
+anisotropy = 0.59
+refraction_enabled = true
+grow_amount = -0.1
+stencil_flags = 2
+stencil_color = Color(0.12156863, 0.69803923, 0.7764706, 0.41568628)
