@@ -228,12 +228,7 @@ func _process_idle_behavior(delta: float) -> void:
 			match cur_task.type:
 				TaskManager.TaskType.GATHER:
 					if cur_task.target_node and is_instance_valid(cur_task.target_node):
-						# Не стартуем сбор по пустому кусту — иначе IDLE↔GATHERING мерцание
-						if _berries_are_ready(cur_task.target_node):
-							start_gathering_at_berries(cur_task.target_node)
-						else:
-							target_berries = cur_task.target_node
-							task_manager.complete_current_task()
+						start_gathering_at_berries(cur_task.target_node)
 						return
 				TaskManager.TaskType.DELIVER:
 					if cur_task.target_node and is_instance_valid(cur_task.target_node):
@@ -344,12 +339,8 @@ func _rotate_towards_target(target_node: Node3D, delta: float) -> void:
 func _on_movement_finished() -> void:
 	if current_state == State.MOVING:
 		if target_berries and is_instance_valid(target_berries):
-			# Пришли к кусту, но ягод нет — ждём созревания в IDLE (без мерцания work)
-			if not _berries_are_ready(target_berries):
-				_enter_wait_for_berries()
-			else:
-				current_state = State.GATHERING
-				_work_timer = 0.0
+			current_state = State.GATHERING
+			_work_timer = 0.0
 		elif target_obstacle and is_instance_valid(target_obstacle):
 			current_state = State.CLEARING
 			_work_timer = 0.0
@@ -375,9 +366,8 @@ func _process_gathering(delta: float) -> void:
 		berries_available = target_berries.has_berries()
 
 	if not berries_available or not target_berries.has_method("harvest_berry"):
-		# Ягод нет / созревание — выходим в IDLE и гасим GATHER-таск.
-		# target_berries НЕ обнуляем: idle-поллер вернёт перса к работе после созревания.
-		_enter_wait_for_berries()
+		current_state = State.IDLE
+		# ПРИМЕЧАНИЕ: НЕ обнуляем target_berries, чтобы помнить куст на период созревания!
 		return
 
 	var required_time: float = default_gather_time
@@ -536,25 +526,6 @@ func _release_all_work_points() -> void:
 		if target_obstacle.has_method("release_work_point"):
 			target_obstacle.release_work_point(self)
 
-## Есть ли на кусте доступные ягоды (не созревает / не пустой)
-func _berries_are_ready(node: Node3D) -> bool:
-	if not node or not is_instance_valid(node):
-		return false
-	if node.has_method("has_berries"):
-		return node.has_berries()
-	return true
-
-## Куст пуст — остаёмся в IDLE, помним target_berries, не крутим GATHER/анимацию work
-func _enter_wait_for_berries() -> void:
-	if target_berries and is_instance_valid(target_berries):
-		if target_berries.has_method("release_work_point"):
-			target_berries.release_work_point(self)
-	if task_manager:
-		task_manager.complete_current_task()
-	_is_unloading_at_storage = false
-	_work_timer = 0.0
-	current_state = State.IDLE
-
 func move_to_position(target_pos: Vector3) -> void:
 	_release_all_work_points()
 	is_being_dragged = false
@@ -570,9 +541,6 @@ func move_to_position(target_pos: Vector3) -> void:
 		nav_agent.target_position = target_pos
 
 func start_gathering_at_berries(berries_node: Node3D) -> void:
-	if not berries_node or not is_instance_valid(berries_node):
-		return
-
 	_release_all_work_points()
 	is_being_dragged = false
 	_is_unloading_at_storage = false
@@ -580,24 +548,6 @@ func start_gathering_at_berries(berries_node: Node3D) -> void:
 	target_obstacle = null
 	_work_timer = 0.0
 	_current_target_pos = _get_free_work_point_safe(berries_node)
-
-	# Пустой / созревающий куст: идём к нему (если далеко), потом спокойно ждём в IDLE
-	if not _berries_are_ready(berries_node):
-		if task_manager:
-			task_manager.complete_current_task()
-		if not is_on_floor():
-			# Спуск по дуге к work point, по приземлении _on_movement_finished → wait
-			current_state = State.MOVING
-		else:
-			var pos_xz = Vector2(global_position.x, global_position.z)
-			var target_xz = Vector2(_current_target_pos.x, _current_target_pos.z)
-			if pos_xz.distance_to(target_xz) > arrival_distance:
-				current_state = State.MOVING
-				if nav_agent:
-					nav_agent.target_position = _current_target_pos
-			else:
-				_enter_wait_for_berries()
-		return
 
 	if task_manager:
 		task_manager.set_user_override_task(TaskManager.Task.new(TaskManager.TaskType.GATHER, Vector3.ZERO, berries_node, 10, true))
@@ -782,10 +732,14 @@ func _update_dev_ui() -> void:
 	if "skills" in data and data.skills.has("forager"):
 		forager_lvl = data.skills["forager"].get("level", 0)
 	
-	var text_info = "%s (%s) [%s]%s\n" % [data.character_name, gender_str, state_str, " *SEL*" if is_selected else ""]
-	text_info += "Talent: %s | Forager Lvl: %d\n" % [talent_str, forager_lvl]
-	text_info += "Age: %d yr | HP: %.0f | Hng: %.0f%%\n" % [data.age, data.health, data.hunger]
-	text_info += "Carrying: %s (%d) | Spd: %.1f | WSpd: %.1f\n" % [
+	var text_info = "%s (%s) [%s]%s
+" % [data.character_name, gender_str, state_str, " *SEL*" if is_selected else ""]
+	text_info += "Talent: %s | Forager Lvl: %d
+" % [talent_str, forager_lvl]
+	text_info += "Age: %d yr | HP: %.0f | Hng: %.0f%%
+" % [data.age, data.health, data.hunger]
+	text_info += "Carrying: %s (%d) | Spd: %.1f | WSpd: %.1f
+" % [
 		data.carried_item if data.carried_item != "" else "None",
 		data.item_amount,
 		speed,

@@ -14,7 +14,7 @@ enum TaskType {
 	WAIT_IDLE,     # Пауза/ожидание на месте
 	GATHER,        # Сбор ягод/ресурсов с куста
 	DELIVER,       # Доставка и разгрузка ресурса на склад
-	EAT,           # Поедание имеющейся еды (из рук)
+	EAT,           # Поедание имеющейся еды (из рук или со склада)
 	CLEAR,         # Расчистка завала/сухостоя
 	BUILD          # Строительство укрытия/шалаша
 }
@@ -26,8 +26,8 @@ class Task:
 	var target_pos: Vector3 = Vector3.ZERO
 	var priority: int = 0             # Чем выше число, тем раньше выполняется
 	var wait_timer: float = 0.0       # Длительность таймера ожидания
-	var is_user_command: bool = false # Вызвана ли задача прямым действием игрока
-	var is_persistent: bool = false   # Фоновая бессрочная задача (например, сбор ягод)
+	var is_user_command: bool = false # Вызвана ли задача прямым действием игрока (Drag & Drop)
+	var is_persistent: bool = false   # Фоновая бессрочная задача (например, цикл работы у куста)
 
 	func _init(p_type: TaskType = TaskType.NONE, p_pos: Vector3 = Vector3.ZERO, p_node: Node3D = null, p_priority: int = 0, p_persistent: bool = false) -> void:
 		type = p_type
@@ -48,39 +48,38 @@ signal queue_changed
 # МЕТОДЫ УПРАВЛЕНИЯ СТЕКОМ ЗАДАЧ
 # ------------------------------------------------------------------------------
 
-## Установить или заменить главную фоновую работу (например, сбор ягод у куста)
-func set_persistent_task(task: Task) -> void:
-	task.is_persistent = true
-	# Очищаем старые фоновые задачи того же типа
-	var filtered: Array[Task] = []
-	for t in _queue:
-		if not t.is_persistent:
-			filtered.append(t)
-	_queue = filtered
-	_queue.push_back(task)
-	_sort_tasks()
+## Добавить фоновую/обычную задачу в стек
+func push_task(task: Task) -> void:
+	# Избегаем дублирования одинаковой задачи на тот же объект
+	for existing in _queue:
+		if existing.type == task.type and existing.target_node == task.target_node and task.target_node != null:
+			return
+			
+	_queue.append(task)
+	sort_tasks()
 	queue_changed.emit()
 
-## Добавить приоритетную субзадачу (например, поесть или отнести ресурс на склад)
+## Добавить приоритетную задачу (например, поесть при голоде или доставить при полном инвентаре)
 func push_subtask(task: Task) -> void:
+	# Субзадача ставится поверх текущей очереди
 	if task.priority == 0:
 		task.priority = 50
 	_queue.push_front(task)
-	_sort_tasks()
+	sort_tasks()
 	queue_changed.emit()
 
-## Установить прямую команду игрока (клик / Context Drop)
+## Назначить прямую ручную команду игрока (Drag & Drop / клик).
+## Перекрывает текущую деятельность, но сохраняет фоновую работу на дне стека.
 func set_user_override_task(task: Task) -> void:
 	task.priority = 100
 	task.is_user_command = true
 	
-	# Сохраняем текущую фоновую задачу, если она была
-	if _current_task != null and _current_task.is_persistent:
+	# Если сейчас выполнялась фоновая работа — сохраняем её обратно в стек
+	if _current_task != null and not _current_task.is_user_command:
 		_queue.push_back(_current_task)
-	
-	_current_task = null
-	
-	# Оставляем в очереди только фоновые работы
+		_current_task = null
+		
+	# Очищаем временные субзадачи, оставляя только фоновые
 	var persistent_tasks: Array[Task] = []
 	for t in _queue:
 		if t.is_persistent:
@@ -88,14 +87,13 @@ func set_user_override_task(task: Task) -> void:
 	_queue = persistent_tasks
 	
 	_queue.push_front(task)
-	_sort_tasks()
 	queue_changed.emit()
 
 ## Сортировка очереди по приоритету
-func _sort_tasks() -> void:
+func sort_tasks() -> void:
 	_queue.sort_custom(func(a: Task, b: Task) -> bool: return a.priority > b.priority)
 
-## Запросить текущую активную задачу
+## Запросить и активировать следующую главную задачу из стека
 func get_current_task() -> Task:
 	if _current_task != null:
 		return _current_task
@@ -108,19 +106,19 @@ func get_current_task() -> Task:
 		
 	return null
 
-## Отметить текущую задачу как выполненную
+## Завершить текущую активную задачу (например, доставку или поедание)
 func complete_current_task() -> void:
 	if _current_task != null:
 		task_completed.emit(_current_task)
 		_current_task = null
 		queue_changed.emit()
 
-## Отменить текущую задачу и перейти к следующей
+## Принудительно отменить текущую задачу и вернуться к предыдущей
 func cancel_current_task() -> void:
 	_current_task = null
 	queue_changed.emit()
 
-## Очистить весь стек задач
+## Очистить всю очередь задач
 func clear_all() -> void:
 	_queue.clear()
 	_current_task = null
@@ -130,7 +128,7 @@ func clear_all() -> void:
 func has_tasks() -> bool:
 	return _current_task != null or _queue.size() > 0
 
-## Название текущей активной задачи для UI
+## Название текущей активной задачи для отладки
 func get_current_task_debug_name() -> String:
 	if _current_task == null:
 		return "NONE"
@@ -139,7 +137,7 @@ func get_current_task_debug_name() -> String:
 		TaskType.WAIT_IDLE: return "WAIT_IDLE"
 		TaskType.GATHER: return "GATHER"
 		TaskType.DELIVER: return "DELIVER"
-		TaskType.EAT: return "EAT"
+		TaskType.EAT: return "EATING"
 		TaskType.CLEAR: return "CLEAR"
 		TaskType.BUILD: return "BUILD"
 		_: return "UNKNOWN"
