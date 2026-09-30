@@ -1,5 +1,8 @@
 Sim game project
 
+2026.09.29
+Universal work place (core/WorkSite) for characters added
+
 2026.09.28
 1st version TaskManagement for chars added (some glutches yet)
 

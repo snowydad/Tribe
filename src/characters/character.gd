@@ -41,6 +41,7 @@ var target_obstacle: Node3D = null
 var _current_target_pos: Vector3 = Vector3.ZERO
 var _work_timer: float = 0.0
 var _idle_check_timer: float = 0.0
+var _dev_ui_timer: float = 0.0
 var _is_unloading_at_storage: bool = false
 
 var work_speed: float = 1.0
@@ -168,7 +169,11 @@ func _physics_process(delta: float) -> void:
 				move_and_slide()
 
 	_update_animation()
-	_update_dev_ui()
+	# DevLabel не каждый кадр — меньше аллокаций строк (важно при нескольких персах)
+	_dev_ui_timer += delta
+	if _dev_ui_timer >= 0.2:
+		_dev_ui_timer = 0.0
+		_update_dev_ui()
 
 # --- УПРАВЛЕНИЕ АНИМАЦИЕЙ ---
 
@@ -222,30 +227,49 @@ func _process_idle_behavior(delta: float) -> void:
 		return
 
 	# 3. Выбор задачи из TaskManager
+	# ВАЖНО: GATHER/CLEAR на «не готовом» сайте НЕ перезапускаем каждый кадр —
+	# иначе IDLE↔GATHERING thrash и просадка FPS.
 	if task_manager and task_manager.has_tasks():
 		var cur_task = task_manager.get_current_task()
 		if cur_task:
 			match cur_task.type:
 				TaskManager.TaskType.GATHER:
 					if cur_task.target_node and is_instance_valid(cur_task.target_node):
-						start_gathering_at_berries(cur_task.target_node)
+						target_berries = cur_task.target_node
+						# Сайт не готов (нет ягод / ripening) — спокойно ждём в IDLE
+						if WorkSite.can_accept(cur_task.target_node, self):
+							start_gathering_at_berries(cur_task.target_node)
+						# иначе: только редкий poll ниже (п.4)
 						return
 				TaskManager.TaskType.DELIVER:
 					if cur_task.target_node and is_instance_valid(cur_task.target_node):
-						start_delivering_to_storage(cur_task.target_node)
+						# Без груза — не дёргать DELIVER по кругу
+						if data and data.item_amount > 0 and WorkSite.can_accept(cur_task.target_node, self):
+							start_delivering_to_storage(cur_task.target_node)
+						elif data and data.item_amount <= 0:
+							task_manager.complete_current_task()
 						return
 				TaskManager.TaskType.EAT:
 					start_eating()
 					return
 				TaskManager.TaskType.CLEAR:
 					if cur_task.target_node and is_instance_valid(cur_task.target_node):
-						start_clearing_obstacle(cur_task.target_node)
+						if WorkSite.can_accept(cur_task.target_node, self) or cur_task.target_node.has_method("clear_obstacle"):
+							# clear_obstacle legacy: can_accept может отсутствовать
+							if not WorkSite.is_site(cur_task.target_node) or WorkSite.can_accept(cur_task.target_node, self):
+								start_clearing_obstacle(cur_task.target_node)
 						return
 				TaskManager.TaskType.MOVE_TO:
-					move_to_position(cur_task.target_pos)
+					# Уже у цели — закрыть задачу, не спамить move_to_position
+					var pos_xz = Vector2(global_position.x, global_position.z)
+					var tgt_xz = Vector2(cur_task.target_pos.x, cur_task.target_pos.z)
+					if pos_xz.distance_to(tgt_xz) <= arrival_distance:
+						task_manager.complete_current_task()
+					else:
+						move_to_position(cur_task.target_pos)
 					return
 
-	# 4. WorkSite снова готов (созрел / освободился) — универсально, не только ягоды
+	# 4. WorkSite снова готов (созрел / освободился) — редко, не каждый кадр
 	if target_berries and is_instance_valid(target_berries):
 		_idle_check_timer += delta
 		if _idle_check_timer >= 0.5:
@@ -336,12 +360,21 @@ func _rotate_towards_target(target_node: Node3D, delta: float) -> void:
 func _on_movement_finished() -> void:
 	if current_state == State.MOVING:
 		if target_berries and is_instance_valid(target_berries):
-			current_state = State.GATHERING
-			_work_timer = 0.0
+			# Нет ресурса — в IDLE ждать созревания, не мигать GATHERING
+			if WorkSite.can_accept(target_berries, self):
+				current_state = State.GATHERING
+				_work_timer = 0.0
+			else:
+				current_state = State.IDLE
 		elif target_obstacle and is_instance_valid(target_obstacle):
 			current_state = State.CLEARING
 			_work_timer = 0.0
 		else:
+			# MOVE_TO / пустая точка
+			if task_manager and task_manager.get_current_task():
+				var t = task_manager.get_current_task()
+				if t and t.type == TaskManager.TaskType.MOVE_TO:
+					task_manager.complete_current_task()
 			current_state = State.IDLE
 	elif current_state == State.DELIVERING:
 		_is_unloading_at_storage = true
@@ -361,7 +394,8 @@ func _process_gathering(delta: float) -> void:
 	# Готовность — у объекта (WorkSite), не has_berries в персе
 	if not WorkSite.can_accept(target_berries, self):
 		current_state = State.IDLE
-		# target_berries помним — idle-поллер возобновит, когда can_accept снова true
+		_idle_check_timer = 0.0  # ждать полсекунды, не дёргать сразу
+		# target_berries помним — idle-поллер / task GATHER возобновит, когда can_accept true
 		return
 
 	var required_time: float = WorkSite.get_time(target_berries, default_gather_time)
@@ -548,13 +582,18 @@ func start_gathering_at_berries(berries_node: Node3D) -> void:
 	if task_manager:
 		task_manager.set_user_override_task(TaskManager.Task.new(TaskManager.TaskType.GATHER, Vector3.ZERO, berries_node, 10, true))
 
+	var site_ready := WorkSite.can_accept(berries_node, self)
+
 	if not is_on_floor():
-		current_state = State.GATHERING
+		# В воздухе: GATHERING только если есть что собирать, иначе IDLE после приземления
+		current_state = State.GATHERING if site_ready else State.MOVING
 	else:
 		var pos_xz = Vector2(global_position.x, global_position.z)
 		var target_xz = Vector2(_current_target_pos.x, _current_target_pos.z)
-		if pos_xz.distance_to(target_xz) <= arrival_distance:
-			current_state = State.GATHERING
+		var at_site := pos_xz.distance_to(target_xz) <= arrival_distance
+		if at_site:
+			# Уже у куста: работаем или спокойно ждём (без thrash)
+			current_state = State.GATHERING if site_ready else State.IDLE
 		else:
 			current_state = State.MOVING
 			if nav_agent:

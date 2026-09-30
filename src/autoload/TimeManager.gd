@@ -100,3 +100,27 @@ func _calculate_offline_time() -> void:
 			if passed_years > 0:
 				print("[TimeManager] Offline progress: ", elapsed_seconds, "s passed (", passed_years, " years)")
 				_advance_year(passed_years)
+
+
+# ------------------------------------------------------------------------------
+# ПУБЛИЧНОЕ API ДЛЯ UI
+# ------------------------------------------------------------------------------
+
+## Год.месяц, напр. "11.1" (месяц 1..12 из прогресса текущего года)
+func get_display_year_month() -> String:
+	var month := get_month()
+	return "%d.%d" % [current_year, month]
+
+## Месяц 1..12 (равномерные доли года)
+func get_month() -> int:
+	if seconds_per_year <= 0.0:
+		return 1
+	var frac: float = clampf(_year_timer / seconds_per_year, 0.0, 0.9999)
+	return int(frac * 12.0) + 1
+
+## Полное игровое время с старта мира (секунды симуляции)
+func get_total_game_seconds() -> float:
+	return float(max(current_year - 1, 0)) * seconds_per_year + _year_timer
+
+func get_total_game_minutes() -> int:
+	return int(get_total_game_seconds() / 60.0)
