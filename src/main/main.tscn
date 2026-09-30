@@ -10,7 +10,7 @@
 [ext_resource type="PackedScene" uid="uid://24t67vidpa66" path="res://src/environment/storage.tscn" id="8_frqgp"]
 [ext_resource type="PackedScene" uid="uid://cxbpv8trxi8g7" path="res://src/environment/berries.tscn" id="9_2nke2"]
 [ext_resource type="PackedScene" uid="uid://dmn7620t3d78t" path="res://src/environment/dev_obstacle.tscn" id="10_km7bn"]
-[ext_resource type="Script" uid="uid://503ly4ypns80" path="res://src/main/CharacterInfoPanel.gd" id="11_erw1m"]
+[ext_resource type="Script" uid="uid://503ly4ypns80" path="res://src/ui/CharacterInfoPanel.gd" id="11_erw1m"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_frqgp"]
 
