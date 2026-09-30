@@ -78,12 +78,10 @@ func load_all_stats_from_config() -> void:
 	
 	var default_strength = ConfigLoader.get_character_value("initial_stats", "strength", 10)
 	var default_intelligence = ConfigLoader.get_character_value("initial_stats", "intelligence", 10)
-	var default_endurance = ConfigLoader.get_character_value("initial_stats", "endurance", 10)
 	
 	stats = {
 		"strength": {"value": default_strength, "exp": 0.0},
 		"intelligence": {"value": default_intelligence, "exp": 0.0},
-		"endurance": {"value": default_endurance, "exp": 0.0}
 	}
 	
 	var skill_list = ["forager", "worker", "builder", "trader", "lumberjack", "farmer"]
