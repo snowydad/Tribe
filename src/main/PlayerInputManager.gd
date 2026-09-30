@@ -6,6 +6,9 @@
 # ==============================================================================
 extends Node3D
 
+# character = CharacterBody3D или null (тип не указываем — emit(null) безопасен)
+signal selection_changed(character)
+
 @export var camera: Camera3D
 @export var drag_threshold: float = 10.0
 @export var drag_height_offset: float = 2.0
@@ -42,6 +45,7 @@ func _input(event: InputEvent) -> void:
 				
 				selected_character = hit_char
 				selected_character.set_selected(true)
+				selection_changed.emit(selected_character)
 				
 				is_dragging_character = true
 				if "is_being_dragged" in selected_character:
@@ -172,6 +176,7 @@ func _handle_click(mouse_position: Vector2) -> void:
 
 		selected_character = hit_char
 		selected_character.set_selected(true)
+		selection_changed.emit(selected_character)
 	else:
 		var ray_origin = camera.project_ray_origin(mouse_position)
 		var ray_end = ray_origin + camera.project_ray_normal(mouse_position) * 1000.0
@@ -197,6 +202,7 @@ func _handle_click(mouse_position: Vector2) -> void:
 			if selected_character:
 				selected_character.set_selected(false)
 				selected_character = null
+				selection_changed.emit(null)
 
 ## ✅ Плавный подъем и ведение над террейном (Test Case 3 и Test Case 5)
 func _update_drag_position(delta: float) -> void:
