@@ -92,13 +92,12 @@ func load_all_stats_from_config() -> void:
 
 ## Подписка на глобальные события времени
 func _connect_time_signals() -> void:
-	if Engine.has_singleton("TimeManager") or Node.new().get_node_or_null("/root/TimeManager") != null:
-		var tm = Node.new().get_node_or_null("/root/TimeManager")
-		if tm:
-			if tm.has_signal("day_passed") and not tm.day_passed.is_connected(_on_day_passed):
-				tm.day_passed.connect(_on_day_passed)
-			if tm.has_signal("year_passed") and not tm.year_passed.is_connected(_on_year_passed):
-				tm.year_passed.connect(_on_year_passed)
+	if TimeManager == null:
+		return
+	# day_passed в TimeManager пока нет — _on_day_passed не вешаем
+	if TimeManager.has_signal("year_passed"):
+		if not TimeManager.year_passed.is_connected(_on_year_passed):
+			TimeManager.year_passed.connect(_on_year_passed)
 
 # ------------------------------------------------------------------------------
 # РАСЧЁТ ЭФФЕКТИВНОСТИ И ПРОГРЕССИИ НАВЫКОВ
