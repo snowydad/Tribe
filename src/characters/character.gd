@@ -95,7 +95,7 @@ func _ready() -> void:
 
 func _physics_process(delta: float) -> void:
 	if data:
-		data.update_needs(delta)
+		data.update_needs(delta, _needs_activity())
 
 	# 1. Захват в воздухе (Drag & Drop)
 	if is_being_dragged:
@@ -313,8 +313,9 @@ func _process_nav_movement(delta: float) -> void:
 
 	if dist_to_final > arrival_distance and dir.length_squared() > 0.001:
 		var move_dir = dir.normalized()
-		var target_vel_x = move_dir.x * speed
-		var target_vel_z = move_dir.z * speed
+		var move_spd: float = speed * _energy_mult()
+		var target_vel_x = move_dir.x * move_spd
+		var target_vel_z = move_dir.z * move_spd
 		var step_len = Vector2(target_vel_x * delta, target_vel_z * delta).length()
 		if step_len > max_step_distance and delta > 0.0:
 			var cap_factor = max_step_distance / step_len
@@ -384,6 +385,26 @@ func _stop_horizontal_movement(delta: float) -> void:
 	velocity.x = move_toward(velocity.x, 0.0, speed * delta * 10.0)
 	velocity.z = move_toward(velocity.z, 0.0, speed * delta * 10.0)
 
+# --- МНОЖИТЕЛЬ ОТ ENERGY (CharacterData.get_energy_speed_mult) ---
+
+## activity для energy: work (−) / rest (+)
+func _needs_activity() -> String:
+	# работа: сбор, разгрузка, расчистка, еда
+	match current_state:
+		State.GATHERING, State.CLEARING, State.EATING:
+			return "work"
+		State.DELIVERING:
+			return "work"  # несёт / сдаёт груз
+		State.MOVING:
+			return "work"  # идёт к цели — тоже расход
+		_:
+			return "rest"  # IDLE, CARRIED
+
+func _energy_mult() -> float:
+	if data and data.has_method("get_energy_speed_mult"):
+		return float(data.get_energy_speed_mult())
+	return 1.0
+
 # --- РАБОЧИЕ ПРОЦЕССЫ ---
 
 func _process_gathering(delta: float) -> void:
@@ -403,6 +424,7 @@ func _process_gathering(delta: float) -> void:
 	var current_work_speed: float = work_speed
 	if data and data.has_method("get_effective_work_speed"):
 		current_work_speed = data.get_effective_work_speed(skill_key)
+	current_work_speed *= _energy_mult()
 
 	_work_timer += delta * current_work_speed
 	if _work_timer >= required_time:
@@ -443,8 +465,9 @@ func start_eating() -> void:
 	current_state = State.EATING
 
 func _process_eating(delta: float) -> void:
-	var req_eat_time: float = eat_speed
-	_work_timer += delta * eat_speed
+	# eat_speed из character.ini [base_stats] = секунды на 1 порцию (не множитель)
+	var req_eat_time: float = maxf(float(eat_speed), 0.01)
+	_work_timer += delta
 	if _work_timer >= req_eat_time:
 		_work_timer = 0.0
 		var nut_val: float = 25.0
@@ -472,6 +495,7 @@ func _process_delivering_unload(delta: float) -> void:
 	var current_work_speed: float = work_speed
 	if data and data.has_method("get_effective_work_speed"):
 		current_work_speed = data.get_effective_work_speed(skill_key)
+	current_work_speed *= _energy_mult()
 
 	_work_timer += delta * current_work_speed
 	if _work_timer >= required_time:
@@ -495,6 +519,7 @@ func _process_clearing(delta: float) -> void:
 		if "skill" in target_obstacle:
 			skill_key = str(target_obstacle.skill)
 		current_work_speed = data.get_effective_work_speed(skill_key)
+	current_work_speed *= _energy_mult()
 
 	_work_timer += delta * current_work_speed
 	if _work_timer >= required_time:

@@ -20,7 +20,7 @@ enum Gender { MALE, FEMALE }
 # ------------------------------------------------------------------------------
 @export var health: float = 100.0   # 100.0 = здоров, 0.0 = смерть
 @export var hunger: float = 0.0     # 0.0 = сыт, 100.0 = умирает от голода
-@export var energy: float = 100.0   # 100.0 = бодр, 0.0 = вымотан
+@export var energy: float = 75.0    # бодрость 0..100; старт из character.ini [initial_stats] energy
 
 # ------------------------------------------------------------------------------
 # 3. ИНВЕНТАРЬ / ПЕРЕНОСИМЫЕ РЕСУРСЫ
@@ -75,6 +75,7 @@ func load_all_stats_from_config() -> void:
 		return
 
 	health = ConfigLoader.get_character_value("base_stats", "max_health", 100.0)
+	energy = float(ConfigLoader.get_character_value("initial_stats", "energy", 75.0))
 	
 	var default_strength = ConfigLoader.get_character_value("initial_stats", "strength", 10)
 	var default_intelligence = ConfigLoader.get_character_value("initial_stats", "intelligence", 10)
@@ -143,33 +144,85 @@ func add_skill_exp(skill_name: String, exp_amount: float) -> void:
 # ------------------------------------------------------------------------------
 # ОБРАБОТКА ВРЕМЕНИ И НУЖД
 # ------------------------------------------------------------------------------
+# hunger += hunger_rate  (всегда)
+# energy += energy_work_rate | energy_rest_rate   (знак уже в ini)
+# energy += energy_drain_rate  если hunger > 50   (обычно отрицательный)
+# health += health_drain_rate  если energy < thr ИЛИ hunger > thr  (один раз)
+# energy → move/work mult: get_energy_speed_mult()
+# ------------------------------------------------------------------------------
 
-## Непрерывное обновление нужд (голод) в реальном времени
-func update_needs(delta: float) -> void:
+func _cfg(key: String, default: float) -> float:
+	if ConfigLoader:
+		return float(ConfigLoader.get_character_value("base_stats", key, default))
+	return default
+
+## activity: "work" | "rest"
+func update_needs(delta: float, activity: String = "rest") -> void:
 	if health <= 0.0:
 		return
 
-	var hunger_rate: float = float(ConfigLoader.get_character_value("base_stats", "hunger_rate", 0.048)) if ConfigLoader else 0.048
-	hunger = clamp(hunger + hunger_rate * delta, 0.0, 100.0)
+	var prev_h: int = int(health)
+	var prev_g: int = int(hunger)
+	var prev_e: int = int(energy)
 
-	if hunger >= 100.0:
-		health = clamp(health - 2.0 * delta, 0.0, 100.0)
-		if health <= 0.0:
-			print("[CharacterData] %s died of starvation!" % character_name)
-			character_died.emit("starvation")
+	var max_hp: float = _cfg("max_health", 100.0)
+	var hunger_rate: float = _cfg("hunger_rate", 0.048)
+	var energy_work_rate: float = _cfg("energy_work_rate", -0.08)
+	var energy_rest_rate: float = _cfg("energy_rest_rate", 0.04)
+	var energy_drain_rate: float = _cfg("energy_drain_rate", -0.03)
+	var health_drain_rate: float = _cfg("health_drain_rate", -0.5)
+	var thr_energy: float = _cfg("health_energy_threshold", 10.0)
+	var thr_hunger: float = _cfg("health_hunger_threshold", 90.0)
 
-	data_changed.emit()
+	# 1) голод
+	hunger = clampf(hunger + hunger_rate * delta, 0.0, 100.0)
 
-## Прием пищи (снижение уровня голода)
+	# 2) energy: work / rest (знак из ini)
+	if activity == "work":
+		energy = clampf(energy + energy_work_rate * delta, 0.0, 100.0)
+	else:
+		energy = clampf(energy + energy_rest_rate * delta, 0.0, 100.0)
+
+	# 2b) доп. при hunger > 50
+	if hunger > 50.0:
+		energy = clampf(energy + energy_drain_rate * delta, 0.0, 100.0)
+
+	# 3) health: один drain, если хотя бы одно условие
+	if energy < thr_energy or hunger > thr_hunger:
+		health = clampf(health + health_drain_rate * delta, 0.0, max_hp)
+
+	if health <= 0.0:
+		health = 0.0
+		print("[CharacterData] %s died (needs). hunger=%.0f energy=%.0f" % [character_name, hunger, energy])
+		character_died.emit("needs")
+		data_changed.emit()
+		return
+
+	if int(health) != prev_h or int(hunger) != prev_g or int(energy) != prev_e:
+		data_changed.emit()
+
+## Еда: −hunger
 func eat_food(nutrition_value: float) -> void:
-	hunger = clamp(hunger - nutrition_value, 0.0, 100.0)
-	print("[CharacterData] %s ate food! Hunger level: %.1f%%" % [character_name, hunger])
+	hunger = clampf(hunger - maxf(nutrition_value, 0.0), 0.0, 100.0)
+	print("[CharacterData] %s ate food! hunger=%.1f" % [character_name, hunger])
 	data_changed.emit()
 
-func _on_day_passed(_total_days: int) -> void:
-	if health <= 0.0:
+## Множитель move/work от energy
+##  >=90 → 1.1 | 75..90 → 1.0 | 10 → 0.25 | <10 → 0.25
+func get_energy_speed_mult() -> float:
+	if energy >= 90.0:
+		return 1.1
+	if energy >= 75.0:
+		return 1.0
+	if energy <= 10.0:
+		return 0.25
+	return lerpf(0.25, 1.0, (energy - 10.0) / 65.0)
+
+func spend_energy(amount: float) -> void:
+	if amount == 0.0:
 		return
-	energy = clamp(energy - 10.0, 0.0, 100.0)
+	# amount > 0 = расход; можно передать и отрицательное для хила
+	energy = clampf(energy - amount, 0.0, 100.0)
 	data_changed.emit()
 
 func _on_year_passed(_total_years: int) -> void:

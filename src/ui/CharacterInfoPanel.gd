@@ -7,7 +7,7 @@ extends PanelContainer
 @export var refresh_interval: float = 0.25
 @export var margin: Vector2 = Vector2(12, 12)
 @export var panel_size_compact: Vector2 = Vector2(200, 56)
-@export var panel_size_expanded: Vector2 = Vector2(280, 110)
+@export var panel_size_expanded: Vector2 = Vector2(320, 200)
 
 var _label: Label
 var _timer: float = 0.0
@@ -66,7 +66,7 @@ func _build_label() -> void:
 		_label.name = "HudLabel"
 		_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
-		_label.add_theme_font_size_override("font_size", 14)
+		_label.add_theme_font_size_override("font_size", 13)
 		add_child(_label)
 	_update_text()
 
@@ -100,6 +100,7 @@ func _format_character_block() -> String:
 	var d = _selected.get("data")
 	if d == null:
 		return ""
+
 	var name_str: String = str(d.character_name) if "character_name" in d else "?"
 	var age: int = int(d.age) if "age" in d else 0
 	var gender_letter := "M"
@@ -109,9 +110,108 @@ func _format_character_block() -> String:
 	var hp: float = float(d.health) if "health" in d else 0.0
 	var hunger: float = float(d.hunger) if "hunger" in d else 0.0
 	var energy: float = float(d.energy) if "energy" in d else 0.0
-	return "%s. %dyrs. %s. %s\nHP:%.0f Hunger:%.0f Energy:%.0f" % [
-		name_str, age, gender_letter, talent, hp, hunger, energy
-	]
+
+	var lines: PackedStringArray = []
+	# Name. 24yrs. M. forager
+	lines.append("%s. %dyrs. %s. %s" % [name_str, age, gender_letter, talent])
+	# HP / Hunger / Energy
+	lines.append("HP:%.0f Hunger:%.0f Energy:%.0f" % [hp, hunger, energy])
+	# forager:2 | worker:1 | …
+	lines.append(_format_skills_line(d))
+	# action: gathering | walk | carry:berry3 | delivering:berry3 | idle
+	lines.append("action: %s" % _format_current_action())
+	# speed / work / velocity
+	lines.append(_format_speeds_line())
+	return "\n".join(lines)
+
+## Навыки, которые перс реально качал (level>0 или exp>0)
+func _format_skills_line(d) -> String:
+	var skills = d.get("skills") if d is Object else null
+	if skills == null or not (skills is Dictionary) or skills.is_empty():
+		return "skills: -"
+	var parts: PackedStringArray = []
+	for key in skills.keys():
+		var entry = skills[key]
+		var lvl: int = 0
+		var exp_v: float = 0.0
+		if entry is Dictionary:
+			lvl = int(entry.get("level", 0))
+			exp_v = float(entry.get("exp", 0.0))
+		if lvl > 0 or exp_v > 0.0:
+			parts.append("%s:%d" % [str(key), lvl])
+	if parts.is_empty():
+		return "skills: -"
+	return " | ".join(parts)
+
+## Текущее действие из current_state + инвентарь
+func _format_current_action() -> String:
+	var ch = _selected
+	var state_val = ch.get("current_state")
+	var state_name := "idle"
+	# enum State { IDLE, MOVING, CARRIED, GATHERING, DELIVERING, CLEARING, EATING }
+	if state_val != null:
+		match int(state_val):
+			0: state_name = "idle"
+			1: state_name = "walk"
+			2: state_name = "carried"
+			3: state_name = "gather"
+			4: state_name = "deliver"
+			5: state_name = "clear"
+			6: state_name = "eat"
+			_:
+				state_name = str(state_val)
+
+	var d = ch.get("data")
+	var item := ""
+	var amount := 0
+	if d != null:
+		if "carried_item" in d:
+			item = str(d.carried_item)
+		if "item_amount" in d:
+			amount = int(d.item_amount)
+
+	var cargo := ""
+	if item != "" and amount > 0:
+		cargo = "%s%d" % [item, amount]
+
+	if state_name == "walk" and cargo != "":
+		return "carry: %s" % cargo
+	if state_name == "deliver":
+		if cargo != "":
+			return "delivering: %s" % cargo
+		return "delivering"
+	if state_name == "gather":
+		return "gather"
+	if state_name == "eat":
+		return "eat"
+	if state_name == "clear":
+		return "clear"
+	if state_name == "carried":
+		return "carried"
+	if state_name == "idle":
+		if cargo != "":
+			return "idle (hold: %s)" % cargo
+		return "idle"
+	return state_name
+
+func _format_speeds_line() -> String:
+	var ch = _selected
+	var move_spd: float = float(ch.get("speed")) if ch.get("speed") != null else 0.0
+	var work_spd: float = float(ch.get("work_speed")) if ch.get("work_speed") != null else 0.0
+	# effective work speed if available (talent/skill)
+	var d = ch.get("data")
+	if d != null and d.has_method("get_effective_work_speed"):
+		# для отображения — talent или forager как типичный рабочий skill
+		var skill_key: String = "forager"
+		if "talent" in d and str(d.talent) != "":
+			skill_key = str(d.talent)
+		work_spd = float(d.get_effective_work_speed(skill_key))
+	var vel: float = 0.0
+	if "velocity" in ch:
+		var v = ch.velocity
+		if v is Vector3:
+			vel = Vector2(v.x, v.z).length()
+	return "spd:%.1f work:%.2f vel:%.2f" % [move_spd, work_spd, vel]
 
 func _format_game_duration() -> String:
 	var total_sec: float = 0.0
