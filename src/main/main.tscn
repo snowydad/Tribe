@@ -76,25 +76,9 @@ mesh = SubResource("SphereMesh_csncc")
 
 [node name="Character" parent="." unique_id=682575563 instance=ExtResource("2_ab7mr")]
 transform = Transform3D(0.9987056, 0, -0.05086355, 0, 1, 0, 0.05086355, 0, 0.9987056, 0, 2.620082, 9.29436)
-speed = null
-rotation_speed = null
-max_step_distance = null
-arrival_distance = null
-docking_distance = null
-default_gather_time = null
-default_deposit_time = null
-default_clear_time = null
 
 [node name="Character2" parent="." unique_id=1713816478 instance=ExtResource("2_ab7mr")]
 transform = Transform3D(0.9987056, 0, -0.05086355, 0, 1, 0, 0.05086355, 0, 0.9987056, 6.6310062, 2.620082, 9.29436)
-speed = null
-rotation_speed = null
-max_step_distance = null
-arrival_distance = null
-docking_distance = null
-default_gather_time = null
-default_deposit_time = null
-default_clear_time = null
 
 [node name="DevBox" type="CSGBox3D" parent="." unique_id=1420518224]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.1304998, 3.8581338)

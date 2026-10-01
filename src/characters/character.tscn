@@ -39,6 +39,29 @@ tracks/0/interp = 1
 tracks/0/loop_wrap = true
 tracks/0/keys = PackedFloat32Array(0, 1, 0, 0, 0, 1)
 
+[sub_resource type="Animation" id="Animation_dx8ua"]
+resource_name = "die"
+length = 0.53333336
+tracks/0/type = "rotation_3d"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath("MeshInstance3D")
+tracks/0/interp = 1
+tracks/0/loop_wrap = true
+tracks/0/keys = PackedFloat32Array(0, 1, 0, 0, 0, 0.99999994, 0.53333336, 1, 0.70710665, 0, 0, 0.7071067)
+
+[sub_resource type="Animation" id="Animation_conoo"]
+resource_name = "eat"
+length = 0.33333334
+loop_mode = 1
+tracks/0/type = "rotation_3d"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath("MeshInstance3D")
+tracks/0/interp = 1
+tracks/0/loop_wrap = true
+tracks/0/keys = PackedFloat32Array(0, 1, 0, 0, 0, 0.9999999, 0.13333334, 1, -0.3108245, 0, 0, 0.9504672, 0.33333334, 1, 0, 0, 0, 0.9999999)
+
 [sub_resource type="Animation" id="Animation_rxhcr"]
 resource_name = "idle"
 loop_mode = 1
@@ -77,6 +100,8 @@ tracks/0/keys = PackedFloat32Array(0, 1, 0, 0, 0, 0.16666667, 1, 0, 0, -0.110351
 [sub_resource type="AnimationLibrary" id="AnimationLibrary_o43y5"]
 _data = {
 &"RESET": SubResource("Animation_5iv74"),
+&"die": SubResource("Animation_dx8ua"),
+&"eat": SubResource("Animation_conoo"),
 &"idle": SubResource("Animation_rxhcr"),
 &"walk": SubResource("Animation_o43y5"),
 &"work": SubResource("Animation_m1b7o")
@@ -88,7 +113,7 @@ collision_mask = 5
 script = ExtResource("1_5iv74")
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="." unique_id=1434398887]
-transform = Transform3D(0.9999999, 0, 0, 0, 0.9999999, 0, 0, 0, 1, 0, 0, 0)
+transform = Transform3D(0.9999999, 0, 0, 0, 0.9999996, 0, 0, 0, 0.9999997, 0, 0, 0)
 mesh = SubResource("BoxMesh_j07er")
 
 [node name="Face" type="MeshInstance3D" parent="MeshInstance3D" unique_id=1902912857]
