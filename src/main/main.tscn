@@ -7,6 +7,7 @@
 [ext_resource type="Script" uid="uid://d28827n4sjcwa" path="res://src/main/camera_3d.gd" id="3_djufw"]
 [ext_resource type="Material" uid="uid://ci6tdoqvoe6o0" path="res://assets/materials/M_CameraTarget.tres" id="5_jqarl"]
 [ext_resource type="Material" uid="uid://ck5o04nlff80n" path="res://assets/models/M_Ground.tres" id="7_30cu5"]
+[ext_resource type="Shader" uid="uid://bu1tyg0c4a10" path="res://src/main/mist.gdshader" id="7_w0wra"]
 [ext_resource type="PackedScene" uid="uid://24t67vidpa66" path="res://src/environment/storage.tscn" id="8_frqgp"]
 [ext_resource type="PackedScene" uid="uid://cxbpv8trxi8g7" path="res://src/environment/berries.tscn" id="9_2nke2"]
 [ext_resource type="PackedScene" uid="uid://dmn7620t3d78t" path="res://src/environment/dev_obstacle.tscn" id="10_km7bn"]
@@ -29,6 +30,12 @@ tonemap_mode = 2
 [sub_resource type="SphereMesh" id="SphereMesh_csncc"]
 radius = 0.25
 height = 0.5
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_j07er"]
+render_priority = 0
+shader = ExtResource("7_w0wra")
+shader_parameter/blur_amount = 5.0
+shader_parameter/distortion = 0.10000000149012
 
 [sub_resource type="CylinderMesh" id="CylinderMesh_j07er"]
 top_radius = 8.0
@@ -80,12 +87,16 @@ transform = Transform3D(0.9987056, 0, -0.05086355, 0, 1, 0, 0.05086355, 0, 0.998
 [node name="Character2" parent="." unique_id=1713816478 instance=ExtResource("2_ab7mr")]
 transform = Transform3D(0.9987056, 0, -0.05086355, 0, 1, 0, 0.05086355, 0, 0.9987056, 6.6310062, 2.620082, 9.29436)
 
+[node name="Character3" parent="." unique_id=1157721677 instance=ExtResource("2_ab7mr")]
+transform = Transform3D(0.9987056, 0, -0.05086355, 0, 1, 0, 0.05086355, 0, 0.9987056, 9.491768, 2.620082, 9.29436)
+
 [node name="DevBox" type="CSGBox3D" parent="." unique_id=1420518224]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.1304998, 3.8581338)
 size = Vector3(2, 2, 2)
 
 [node name="DevSphere" type="CSGSphere3D" parent="." unique_id=714643722]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 12.526248, 2.3462727, 16.016521)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.008948088, 2.3462727, 5.460557)
+material_override = SubResource("ShaderMaterial_j07er")
 radius = 1.0
 
 [node name="Island" type="MeshInstance3D" parent="." unique_id=1500141399]
