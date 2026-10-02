@@ -201,10 +201,14 @@ func update_needs(delta: float, activity: String = "rest") -> void:
 	if int(health) != prev_h or int(hunger) != prev_g or int(energy) != prev_e:
 		data_changed.emit()
 
-## Еда: −hunger
+## Еда: −hunger, +energy (доля nutrition)
 func eat_food(nutrition_value: float) -> void:
-	hunger = clampf(hunger - maxf(nutrition_value, 0.0), 0.0, 100.0)
-	print("[CharacterData] %s ate food! hunger=%.1f" % [character_name, hunger])
+	var n: float = maxf(nutrition_value, 0.0)
+	hunger = clampf(hunger - n, 0.0, 100.0)
+	# energy_eat_ratio из character.ini [base_stats]: сколько nutrition идёт в energy (0.5 = +12.5 от ягоды 25)
+	var ratio: float = _cfg("energy_eat_ratio", 0.5)
+	energy = clampf(energy + n * ratio, 0.0, 100.0)
+	print("[CharacterData] %s ate food! hunger=%.1f energy=%.1f (+%.1f)" % [character_name, hunger, energy, n * ratio])
 	data_changed.emit()
 
 ## Множитель move/work от energy

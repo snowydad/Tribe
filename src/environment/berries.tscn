@@ -37,16 +37,19 @@ ripening_time = 86400.0
 
 [node name="berries" parent="." unique_id=359153156 instance=ExtResource("2_jpmde")]
 
-[node name="Berry_008" parent="berries/Armature/Skeleton3D" parent_id_path=PackedInt32Array(359153156, 1360906931) index="1" unique_id=1646894171]
+[node name="Berry_b_008" parent="berries/Armature/Skeleton3D" parent_id_path=PackedInt32Array(359153156, 959699049) index="1" unique_id=2113302049]
 transform = Transform3D(0.7863831, 7.916242e-09, 0.61773866, -1.3969839e-08, -0.99999964, 3.0733645e-08, 0.6177387, -3.2316798e-08, -0.7863831, 0.40184766, 0.47278857, -0.26709595)
 
-[node name="Berry_003" parent="berries/Armature/Skeleton3D" parent_id_path=PackedInt32Array(359153156, 1360906931) index="2" unique_id=1948261402]
+[node name="Berry_b_003" parent="berries/Armature/Skeleton3D" parent_id_path=PackedInt32Array(359153156, 959699049) index="2" unique_id=1066510406]
 transform = Transform3D(0.3871181, -2.0023435e-08, 0.92203003, -3.7718564e-08, -0.9999998, -6.519258e-09, 0.9220299, -3.220093e-08, -0.3871182, 0.16953994, 0.806972, -0.434201)
 
-[node name="Berry_004" parent="berries/Armature/Skeleton3D" parent_id_path=PackedInt32Array(359153156, 1360906931) index="4" unique_id=458000664]
+[node name="Berry_b_004" parent="berries/Armature/Skeleton3D" parent_id_path=PackedInt32Array(359153156, 959699049) index="4" unique_id=1490719975]
 transform = Transform3D(0.70027876, -1.9557774e-08, -0.71386915, 7.916242e-09, -0.9999996, 3.655441e-08, -0.7138691, -3.1269593e-08, -0.70027876, -0.34981287, 0.78703666, -0.2537058)
 
-[node name="AnimationPlayer" parent="berries" index="1" unique_id=637888149]
+[node name="Berry_b_002" parent="berries/Armature/Skeleton3D" parent_id_path=PackedInt32Array(359153156, 959699049) index="8" unique_id=1994120919]
+transform = Transform3D(0.01921882, -6.984919e-08, 0.99981517, -3.3614924e-08, -0.9999998, -6.984919e-08, 0.9998151, -3.2074553e-08, -0.019218821, 0.13847834, 0.7879397, 0.43678552)
+
+[node name="AnimationPlayer" parent="berries" index="1" unique_id=616608810]
 autoplay = &"Wind-100"
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="." unique_id=1112722748]
