@@ -53,18 +53,18 @@ signal character_died(reason: String)
 ## Генерация личности (пол, имя, стартовый возраст и врождённый талант)
 func generate_identity() -> void:
 	gender = Gender.MALE if randf() > 0.5 else Gender.FEMALE
-	
+
 	var random_id_index: int = randi_range(1, 3)
 	var name_id: String = "MALE_NAME_%d" % random_id_index if gender == Gender.MALE else "FEMALE_NAME_%d" % random_id_index
 	character_name = tr(name_id)
-	
+
 	var min_age: int = ConfigLoader.get_character_value("age_ranges", "min_starting_age", 18) if ConfigLoader else 18
 	var max_age: int = ConfigLoader.get_character_value("age_ranges", "max_starting_age", 35) if ConfigLoader else 35
 	age = randi_range(min_age, max_age)
-	
+
 	var available_talents = ["forager", "worker", "craftsman"]
 	talent = available_talents[randi() % available_talents.size()]
-	
+
 	load_all_stats_from_config()
 	_connect_time_signals()
 
@@ -76,15 +76,15 @@ func load_all_stats_from_config() -> void:
 
 	health = ConfigLoader.get_character_value("base_stats", "max_health", 100.0)
 	energy = float(ConfigLoader.get_character_value("initial_stats", "energy", 75.0))
-	
+
 	var default_strength = ConfigLoader.get_character_value("initial_stats", "strength", 10)
 	var default_intelligence = ConfigLoader.get_character_value("initial_stats", "intelligence", 10)
-	
+
 	stats = {
 		"strength": {"value": default_strength, "exp": 0.0},
 		"intelligence": {"value": default_intelligence, "exp": 0.0},
 	}
-	
+
 	var skill_list = ["forager", "worker", "builder", "trader", "lumberjack", "farmer"]
 	skills.clear()
 	for skill_key in skill_list:
@@ -106,39 +106,39 @@ func _connect_time_signals() -> void:
 
 func get_effective_work_speed(skill_name: String) -> float:
 	var base_speed: float = ConfigLoader.get_character_value("base_stats", "work_speed", 1.0) if ConfigLoader else 1.0
-	
+
 	var talent_multiplier: float = 1.0
 	if talent == skill_name and ConfigLoader:
 		talent_multiplier = ConfigLoader.get_skill_value("talents", skill_name, 1.25)
-		
+
 	var skill_level: int = 0
 	if skills.has(skill_name):
 		skill_level = skills[skill_name].get("level", 0)
-		
+
 	var bonus_per_lvl: float = ConfigLoader.get_skill_value("skill_progression", "speed_bonus_per_level", 0.1) if ConfigLoader else 0.1
-	
+
 	var effective_speed = base_speed * talent_multiplier * (1.0 + float(skill_level) * bonus_per_lvl)
 	return effective_speed
 
 func add_skill_exp(skill_name: String, exp_amount: float) -> void:
 	if not skills.has(skill_name):
 		skills[skill_name] = {"level": 0, "exp": 0.0}
-		
+
 	var max_lvl: int = ConfigLoader.get_skill_value("skill_progression", "max_level", 10) if ConfigLoader else 10
 	var exp_for_levelup: float = ConfigLoader.get_skill_value("skill_progression", "exp_for_level_up", 100.0) if ConfigLoader else 100.0
-	
+
 	var current_skill = skills[skill_name]
 	if current_skill["level"] >= max_lvl:
 		return
-		
+
 	current_skill["exp"] += exp_amount
 	print("[CharacterData] %s gained %.1f XP in skill '%s' (Total XP: %.1f)" % [character_name, exp_amount, skill_name, current_skill["exp"]])
-	
+
 	while current_skill["exp"] >= exp_for_levelup and current_skill["level"] < max_lvl:
 		current_skill["exp"] -= exp_for_levelup
 		current_skill["level"] += 1
 		print("[CharacterData] LEVEL UP! %s reached level %d in '%s'!" % [character_name, current_skill["level"], skill_name])
-		
+
 	data_changed.emit()
 
 # ------------------------------------------------------------------------------
@@ -201,12 +201,11 @@ func update_needs(delta: float, activity: String = "rest") -> void:
 	if int(health) != prev_h or int(hunger) != prev_g or int(energy) != prev_e:
 		data_changed.emit()
 
-## Еда: −hunger, +energy (доля nutrition)
+## Еда: −hunger, +energy (energy_eat_ratio)
 func eat_food(nutrition_value: float) -> void:
 	var n: float = maxf(nutrition_value, 0.0)
 	hunger = clampf(hunger - n, 0.0, 100.0)
-	# energy_eat_ratio из character.ini [base_stats]: сколько nutrition идёт в energy (0.5 = +12.5 от ягоды 25)
-	var ratio: float = _cfg("energy_eat_ratio", 0.5)
+	var ratio: float = _cfg("energy_eat_ratio", 1.0)
 	energy = clampf(energy + n * ratio, 0.0, 100.0)
 	print("[CharacterData] %s ate food! hunger=%.1f energy=%.1f (+%.1f)" % [character_name, hunger, energy, n * ratio])
 	data_changed.emit()
@@ -235,7 +234,7 @@ func _on_year_passed(_total_years: int) -> void:
 
 	age += 1
 	print("[CharacterData] %s aged up! New age: %d" % [character_name, age])
-	
+
 	if age > 60:
 		var death_chance = (age - 60) * 0.05
 		if randf() < death_chance:

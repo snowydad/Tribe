@@ -39,6 +39,19 @@ func get_work_time() -> float:
 func has_space() -> bool:
 	return max_storage <= 0 or stored_food < max_storage
 
+func has_food() -> bool:
+	return stored_food > 0
+
+## Снять еду со склада (для поедания персом). Возвращает сколько реально сняли.
+func withdraw_food(amount: int = 1) -> int:
+	if amount <= 0 or stored_food <= 0:
+		return 0
+	var take: int = mini(amount, stored_food)
+	stored_food -= take
+	print("[Storage] Food withdrawn: -%d | Total: %d/%d" % [take, stored_food, max_storage])
+	_update_dev_ui()
+	return take
+
 func deposit_food(amount: int) -> void:
 	var prev_food = stored_food
 	if max_storage > 0:
@@ -55,7 +68,6 @@ func can_accept_work(worker: Node = null) -> bool:
 		return false
 	if worker == null:
 		return true
-	# Нужен груз в руках
 	if "data" in worker and worker.data:
 		return worker.data.item_amount > 0
 	return true
@@ -66,7 +78,6 @@ func get_work_skill() -> String:
 func get_work_type() -> String:
 	return work_type
 
-## Принимает груз из data worker'а. Очищает руки worker'а.
 func do_work(worker: Node = null) -> Dictionary:
 	if worker == null or not ("data" in worker) or worker.data == null:
 		return {"ok": false, "reason": "no_worker"}

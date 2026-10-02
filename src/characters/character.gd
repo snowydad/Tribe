@@ -1,9 +1,11 @@
 # ==============================================================================
 # ФАЙЛ: src/characters/Character.gd
+# ОБНОВЛЕНО: 2026-10-02 21:26 CEST — fix drop: _at_work_point uses site, not drop pos
 # НАЗНАЧЕНИЕ: Контроллер персонажа с зафиксированным инпутом, считыванием .ini
 #            (move_speed, work_speed), поддержкой RVO2 Avoidance для обхода
 #            NavigationObstacle3D, спуском по дуге при Context Drop,
 #            непрерывным рабочим циклом фуражира, интеграцией TaskManager и анимациями.
+#            Матрица hunger/склад/еда; work только у WorkPoint (_at_work_point).
 # ==============================================================================
 extends CharacterBody3D
 
@@ -43,6 +45,9 @@ var _work_timer: float = 0.0
 var _idle_check_timer: float = 0.0
 var _dev_ui_timer: float = 0.0
 var _is_unloading_at_storage: bool = false
+var _want_storage_meal: bool = false  # идём на склад поесть (снять 1 еду)
+var cargo_drop_delay: float = 30.0   # character.ini — дроп груза в G
+var _cargo_drop_timer: float = 0.0
 
 var work_speed: float = 1.0
 var eat_speed: float = 1.0
@@ -72,12 +77,14 @@ func _ready() -> void:
 			eat_speed = float(ConfigLoader.get_character_value("base_stats", "eat_speed", 1.0))
 			arrival_distance = float(ConfigLoader.get_character_value("navigation", "arrival_distance", arrival_distance))
 			docking_distance = float(ConfigLoader.get_character_value("navigation", "docking_distance", docking_distance))
+			cargo_drop_delay = float(ConfigLoader.get_character_value("base_stats", "cargo_drop_delay", cargo_drop_delay))
 		elif ConfigLoader.has_method("get_config_value"):
 			speed = float(ConfigLoader.get_config_value("character", "base_stats", "move_speed", speed))
 			work_speed = float(ConfigLoader.get_config_value("character", "base_stats", "work_speed", work_speed))
 			eat_speed = float(ConfigLoader.get_config_value("character", "base_stats", "eat_speed", 1.0))
 			arrival_distance = float(ConfigLoader.get_config_value("character", "navigation", "arrival_distance", arrival_distance))
 			docking_distance = float(ConfigLoader.get_config_value("character", "navigation", "docking_distance", docking_distance))
+			cargo_drop_delay = float(ConfigLoader.get_config_value("character", "base_stats", "cargo_drop_delay", cargo_drop_delay))
 
 	# Настройка агента и подключение RVO2 Avoidance
 	if nav_agent:
@@ -138,7 +145,14 @@ func _physics_process(delta: float) -> void:
 				move_and_slide()
 
 		State.DELIVERING:
-			if not is_on_floor():
+			# Склад полон — не крутим разгрузку
+			if data and data.item_amount > 0 and not _storage_has_space(target_storage):
+				if _handle_full_storage_with_cargo():
+					move_and_slide()
+				else:
+					current_state = State.IDLE
+					move_and_slide()
+			elif not is_on_floor():
 				_process_arc_drop_movement(delta)
 				move_and_slide()
 			elif _is_unloading_at_storage:
@@ -216,51 +230,73 @@ func _find_animation_player(node: Node) -> AnimationPlayer:
 # --- ПОВЕДЕНИЕ В IDLE (ОБРАБОТКА ТАСКОВ И АВТОМАТИЧЕСКИЙ ВОЗВРАТ К РАБОТЕ) ---
 
 func _process_idle_behavior(delta: float) -> void:
-	# 1. Еда в руках при голоде
-	if data and data.item_amount > 0 and data.carried_item == "berry" and data.hunger >= 50.0:
-		start_eating()
+	# G: простой с грузом при full + hunger0 + energy100 → дроп через cargo_drop_delay
+	_tick_cargo_drop(delta)
+
+	# --- Матрица: руки заняты ---
+	if _hands_busy():
+		if _should_eat_from_hands():
+			_start_eat_hands()
+			return
+		if _should_deliver():
+			_go_to_nearest_storage()
+			return
+		# G / full wait: остаёмся IDLE, poll места на складе
+		_idle_check_timer += delta
+		if _idle_check_timer >= 0.5:
+			_idle_check_timer = 0.0
+			if _should_deliver():
+				_go_to_nearest_storage()
 		return
 
-	# 2. Несение на склад при занятых руках
-	if data and data.item_amount > 0:
-		_go_to_nearest_storage()
+	# --- Руки пусты ---
+	# C: hunger >= 25 + склад >= 1 → meal со склада
+	if _should_eat_from_storage():
+		_go_eat_from_storage()
 		return
 
-	# 3. Выбор задачи из TaskManager
-	# ВАЖНО: GATHER/CLEAR на «не готовом» сайте НЕ перезапускаем каждый кадр —
-	# иначе IDLE↔GATHERING thrash и просадка FPS.
+	# D: hunger >= 25 + склад 0 + знает куст (target_berries память)
+	if _should_go_forage():
+		if WorkSite.can_accept(target_berries, self):
+			start_work_at(target_berries)
+			return
+		# куст не готов — ждём ниже poll
+
+	# TaskManager (CLEAR / MOVE_TO / явный GATHER и т.д.)
 	if task_manager and task_manager.has_tasks():
 		var cur_task = task_manager.get_current_task()
 		if cur_task:
 			match cur_task.type:
 				TaskManager.TaskType.GATHER:
 					if cur_task.target_node and is_instance_valid(cur_task.target_node):
-						target_berries = cur_task.target_node
-						# Сайт не готов (нет ягод / ripening) — спокойно ждём в IDLE
+						target_berries = cur_task.target_node  # обновить память
+						# не копим, если сыт и склад full? сыт hunger<25 — можно ждать
+						if data and data.hunger < 25.0 and not _storage_has_space():
+							return
 						if WorkSite.can_accept(cur_task.target_node, self):
 							start_gathering_at_berries(cur_task.target_node)
-						# иначе: только редкий poll ниже (п.4)
 						return
 				TaskManager.TaskType.DELIVER:
 					if cur_task.target_node and is_instance_valid(cur_task.target_node):
-						# Без груза — не дёргать DELIVER по кругу
-						if data and data.item_amount > 0 and WorkSite.can_accept(cur_task.target_node, self):
+						if _hands_busy() and WorkSite.can_accept(cur_task.target_node, self):
 							start_delivering_to_storage(cur_task.target_node)
-						elif data and data.item_amount <= 0:
+						elif _hands_busy() and not WorkSite.can_accept(cur_task.target_node, self):
+							_handle_full_storage_with_cargo()
+						elif not _hands_busy():
 							task_manager.complete_current_task()
 						return
 				TaskManager.TaskType.EAT:
-					start_eating()
+					if _has_edible_cargo():
+						start_eating()
+					else:
+						task_manager.complete_current_task()
 					return
 				TaskManager.TaskType.CLEAR:
 					if cur_task.target_node and is_instance_valid(cur_task.target_node):
-						if WorkSite.can_accept(cur_task.target_node, self) or cur_task.target_node.has_method("clear_obstacle"):
-							# clear_obstacle legacy: can_accept может отсутствовать
-							if not WorkSite.is_site(cur_task.target_node) or WorkSite.can_accept(cur_task.target_node, self):
-								start_clearing_obstacle(cur_task.target_node)
+						if not WorkSite.is_site(cur_task.target_node) or WorkSite.can_accept(cur_task.target_node, self):
+							start_clearing_obstacle(cur_task.target_node)
 						return
 				TaskManager.TaskType.MOVE_TO:
-					# Уже у цели — закрыть задачу, не спамить move_to_position
 					var pos_xz = Vector2(global_position.x, global_position.z)
 					var tgt_xz = Vector2(cur_task.target_pos.x, cur_task.target_pos.z)
 					if pos_xz.distance_to(tgt_xz) <= arrival_distance:
@@ -269,14 +305,23 @@ func _process_idle_behavior(delta: float) -> void:
 						move_to_position(cur_task.target_pos)
 					return
 
-	# 4. WorkSite снова готов (созрел / освободился) — редко, не каждый кадр
-	if target_berries and is_instance_valid(target_berries):
+	# Poll: куст созрел (память target_berries), руки пусты
+	if _knows_berries():
 		_idle_check_timer += delta
 		if _idle_check_timer >= 0.5:
 			_idle_check_timer = 0.0
-			if WorkSite.can_accept(target_berries, self):
-				print("[Character] %s: work site ready again, resuming..." % data.character_name)
-				start_work_at(target_berries)
+			# D-логика или просто продолжить работу если сыт и есть место на складе
+			if data and data.item_amount > 0:
+				return
+			if data and data.hunger >= 25.0 and not _storage_has_food():
+				if WorkSite.can_accept(target_berries, self):
+					start_work_at(target_berries)
+				return
+			# сыт (hunger < 25): собираем только если есть куда сдавать
+			if data and data.hunger < 25.0 and _storage_has_space():
+				if WorkSite.can_accept(target_berries, self):
+					print("[Character] %s: work site ready, resuming..." % data.character_name)
+					start_work_at(target_berries)
 
 # --- ЛОГИКА ДВИЖЕНИЯ И AVOIDANCE ---
 
@@ -360,26 +405,76 @@ func _rotate_towards_target(target_node: Node3D, delta: float) -> void:
 
 func _on_movement_finished() -> void:
 	if current_state == State.MOVING:
-		if target_berries and is_instance_valid(target_berries):
-			# Нет ресурса — в IDLE ждать созревания, не мигать GATHERING
-			if WorkSite.can_accept(target_berries, self):
-				current_state = State.GATHERING
+		# Пришли поесть со склада — только у склада
+		if _want_storage_meal and target_storage and is_instance_valid(target_storage):
+			if _at_work_point(target_storage):
+				if _withdraw_one_and_eat(target_storage):
+					return
+			_want_storage_meal = false
+			# не у склада — дойти
+			if not _at_work_point(target_storage):
+				_go_eat_from_storage()
+				return
+			current_state = State.IDLE
+			return
+
+		# Закрыть MOVE_TO, если это был drop / приказ «иди сюда»
+		var was_move_to := false
+		if task_manager and task_manager.get_current_task():
+			var cur_t = task_manager.get_current_task()
+			if cur_t and cur_t.type == TaskManager.TaskType.MOVE_TO:
+				task_manager.complete_current_task()
+				was_move_to = true
+
+		# После drop: work только у site. С грузом — сначала склад, потом куст.
+		if _hands_busy() and target_storage and is_instance_valid(target_storage):
+			if _at_work_point(target_storage):
+				current_state = State.DELIVERING
+				_is_unloading_at_storage = true
 				_work_timer = 0.0
 			else:
-				current_state = State.IDLE
-		elif target_obstacle and is_instance_valid(target_obstacle):
-			current_state = State.CLEARING
+				start_delivering_to_storage(target_storage)
+			return
+
+		if target_obstacle and is_instance_valid(target_obstacle):
+			if _at_work_point(target_obstacle):
+				current_state = State.CLEARING
+				_work_timer = 0.0
+			else:
+				start_clearing_obstacle(target_obstacle)
+			return
+
+		if not _hands_busy() and target_berries and is_instance_valid(target_berries):
+			if _at_work_point(target_berries):
+				if WorkSite.can_accept(target_berries, self):
+					current_state = State.GATHERING
+					_work_timer = 0.0
+				else:
+					current_state = State.IDLE
+			else:
+				start_gathering_at_berries(target_berries)
+			return
+
+		# Груз есть, склада в памяти нет — nearest storage / matrix
+		if _hands_busy():
+			_resolve_cargo_action()
+			return
+
+		current_state = State.IDLE
+
+	elif current_state == State.DELIVERING:
+		# Разгрузка только у склада, иначе продолжаем идти
+		if target_storage and is_instance_valid(target_storage) and _at_work_point(target_storage):
+			_is_unloading_at_storage = true
 			_work_timer = 0.0
 		else:
-			# MOVE_TO / пустая точка
-			if task_manager and task_manager.get_current_task():
-				var t = task_manager.get_current_task()
-				if t and t.type == TaskManager.TaskType.MOVE_TO:
-					task_manager.complete_current_task()
-			current_state = State.IDLE
-	elif current_state == State.DELIVERING:
-		_is_unloading_at_storage = true
-		_work_timer = 0.0
+			_is_unloading_at_storage = false
+			if target_storage and is_instance_valid(target_storage):
+				_current_target_pos = _get_free_work_point_safe(target_storage)
+				if nav_agent:
+					nav_agent.target_position = _current_target_pos
+			else:
+				current_state = State.IDLE
 
 func _stop_horizontal_movement(delta: float) -> void:
 	velocity.x = move_toward(velocity.x, 0.0, speed * delta * 10.0)
@@ -404,6 +499,223 @@ func _energy_mult() -> float:
 	if data and data.has_method("get_energy_speed_mult"):
 		return float(data.get_energy_speed_mult())
 	return 1.0
+
+## У work-point / рядом с сайтом?
+## ВАЖНО: не смотреть только на _current_target_pos — после drop это точка отпускания!
+## «На месте» = персонаж рядом с самим site (или с work-point этого site).
+func _at_work_point(site: Node3D = null) -> bool:
+	var pos_xz := Vector2(global_position.x, global_position.z)
+	var near := maxf(docking_distance, arrival_distance)
+
+	if site and is_instance_valid(site):
+		var site_xz := Vector2(site.global_position.x, site.global_position.z)
+		# 1) рядом с корнем сайта
+		if pos_xz.distance_to(site_xz) <= near:
+			return true
+		# 2) _current_target_pos — только если он относится к этому site (не точка drop)
+		var tgt_xz := Vector2(_current_target_pos.x, _current_target_pos.z)
+		if pos_xz.distance_to(tgt_xz) <= arrival_distance and tgt_xz.distance_to(site_xz) <= near * 2.0:
+			return true
+		return false
+
+	# Без site — только «дошёл до назначенной точки» (MOVE_TO / drop)
+	var tgt_xz2 := Vector2(_current_target_pos.x, _current_target_pos.z)
+	return pos_xz.distance_to(tgt_xz2) <= arrival_distance
+
+## Есть ли место хотя бы на одном складе (или на target)
+func _storage_has_space(st: Node = null) -> bool:
+	if st and is_instance_valid(st):
+		if st.has_method("has_space"):
+			return bool(st.has_space())
+		if st.has_method("can_accept_work"):
+			return bool(st.can_accept_work(self))
+		return WorkSite.can_accept(st, self)
+	var storages = get_tree().get_nodes_in_group("storage") if get_tree() else []
+	for s in storages:
+		if s and is_instance_valid(s) and _storage_has_space(s):
+			return true
+	return false
+
+func _storage_has_food(st: Node = null) -> bool:
+	if st and is_instance_valid(st):
+		if st.has_method("has_food"):
+			return bool(st.has_food())
+		if "stored_food" in st:
+			return int(st.stored_food) > 0
+		return false
+	var storages = get_tree().get_nodes_in_group("storage") if get_tree() else []
+	for s in storages:
+		if s and is_instance_valid(s) and _storage_has_food(s):
+			return true
+	return false
+
+func _find_storage_with_food() -> Node3D:
+	var storages = get_tree().get_nodes_in_group("storage") if get_tree() else []
+	var best: Node3D = null
+	var best_d: float = INF
+	for s in storages:
+		var ns = s as Node3D
+		if not ns or not is_instance_valid(ns):
+			continue
+		if not _storage_has_food(ns):
+			continue
+		var d = global_position.distance_to(ns.global_position)
+		if d < best_d:
+			best_d = d
+			best = ns
+	return best
+
+## Память: знает куст ягод
+func _knows_berries() -> bool:
+	return target_berries != null and is_instance_valid(target_berries)
+
+func _hands_busy() -> bool:
+	return data != null and data.item_amount > 0
+
+func _has_edible_cargo() -> bool:
+	if not _hands_busy():
+		return false
+	var item := str(data.carried_item).strip_edges().to_lower()
+	return item in ["berry", "berries", "fruit", "food", "mushroom", "fish"] or item.is_empty()
+
+## G: full + energy==100 + hunger==0 → бездействует с грузом
+func _is_cargo_hold_g() -> bool:
+	if not _hands_busy():
+		return false
+	if _storage_has_space():
+		return false
+	return data.energy >= 100.0 and data.hunger <= 0.0
+
+## Есть с рук?
+## A: hunger >= 25 (склад не важен)
+## E: full + hunger < 100
+## F: full + energy < 100
+## G побеждает: full + energy 100 + hunger 0 → не есть
+func _should_eat_from_hands() -> bool:
+	if not _has_edible_cargo():
+		return false
+	if _is_cargo_hold_g():
+		return false
+	if data.hunger >= 25.0:
+		return true  # A
+	if not _storage_has_space():
+		if data.hunger < 100.0:
+			return true  # E
+		if data.energy < 100.0:
+			return true  # F
+	return false
+
+## B: hunger < 25 + склад не full + руки заняты → deliver
+func _should_deliver() -> bool:
+	if not _hands_busy():
+		return false
+	if data.hunger >= 25.0:
+		return false
+	return _storage_has_space()
+
+## C: руки пусты + hunger >= 25 + склад >= 1
+func _should_eat_from_storage() -> bool:
+	if _hands_busy() or not data:
+		return false
+	if data.hunger < 25.0:
+		return false
+	return _storage_has_food()
+
+## D: руки пусты + hunger >= 25 + склад 0 + знает куст
+func _should_go_forage() -> bool:
+	if _hands_busy() or not data:
+		return false
+	if data.hunger < 25.0:
+		return false
+	if _storage_has_food():
+		return false
+	return _knows_berries()
+
+func _start_eat_hands() -> void:
+	_cargo_drop_timer = 0.0
+	_want_storage_meal = false
+	_is_unloading_at_storage = false
+	if task_manager:
+		task_manager.push_subtask(TaskManager.Task.new(TaskManager.TaskType.EAT, Vector3.ZERO, null, 90))
+	start_eating()
+
+## Решение при грузе в руках (после сбора / idle / full storage)
+func _resolve_cargo_action() -> void:
+	if not _hands_busy():
+		return
+	if _should_eat_from_hands():
+		_start_eat_hands()
+		return
+	if _should_deliver():
+		var nearest_st = _find_nearest_storage_node()
+		if task_manager and nearest_st:
+			task_manager.push_subtask(TaskManager.Task.new(TaskManager.TaskType.DELIVER, Vector3.ZERO, nearest_st, 60))
+		_go_to_nearest_storage()
+		return
+	# G или ждать: idle + (таймер дропа крутится в idle)
+	_is_unloading_at_storage = false
+	current_state = State.IDLE
+
+## Дроп груза (G простоял cargo_drop_delay)
+func _tick_cargo_drop(delta: float) -> void:
+	if not _is_cargo_hold_g():
+		_cargo_drop_timer = 0.0
+		return
+	_cargo_drop_timer += delta
+	if _cargo_drop_timer >= cargo_drop_delay:
+		_cargo_drop_timer = 0.0
+		print("[Character] %s dropped cargo after %.0fs hold (storage full, hunger=0 energy=100)" % [
+			data.character_name if data else "?", cargo_drop_delay
+		])
+		data.carried_item = ""
+		data.item_amount = 0
+		if task_manager and task_manager.has_tasks():
+			var cur = task_manager.get_current_task()
+			if cur and cur.type == TaskManager.TaskType.DELIVER:
+				task_manager.complete_current_task()
+
+func _withdraw_one_and_eat(st: Node) -> bool:
+	if not data or not st or not is_instance_valid(st):
+		return false
+	if not st.has_method("withdraw_food"):
+		return false
+	var got: int = int(st.withdraw_food(1))
+	if got <= 0:
+		return false
+	data.carried_item = "berry"
+	data.item_amount = got
+	print("[Character] %s took food from storage (-%d)" % [data.character_name, got])
+	_want_storage_meal = false
+	_cargo_drop_timer = 0.0
+	_start_eat_hands()
+	return true
+
+func _go_eat_from_storage() -> void:
+	var st = _find_storage_with_food()
+	if not st:
+		return
+	_want_storage_meal = true
+	_is_unloading_at_storage = false
+	_cargo_drop_timer = 0.0
+	target_storage = st
+	_current_target_pos = _get_free_work_point_safe(st)
+	var pos_xz = Vector2(global_position.x, global_position.z)
+	var target_xz = Vector2(_current_target_pos.x, _current_target_pos.z)
+	if pos_xz.distance_to(target_xz) <= arrival_distance:
+		_withdraw_one_and_eat(st)
+	else:
+		current_state = State.MOVING
+		if nav_agent:
+			nav_agent.target_position = _current_target_pos
+
+## full storage + cargo (legacy name): решаем по матрице
+func _handle_full_storage_with_cargo() -> bool:
+	if not _hands_busy():
+		return false
+	if _storage_has_space():
+		return false
+	_resolve_cargo_action()
+	return true
 
 # --- РАБОЧИЕ ПРОЦЕССЫ ---
 
@@ -448,17 +760,8 @@ func _process_gathering(delta: float) -> void:
 			data.add_skill_exp(xp_skill, xp_per_cycle)
 
 		print("[Character] Work done at site: +%d %s" % [data.item_amount, data.carried_item])
-
-		if data.hunger >= 50.0 and data.item_amount > 0:
-			print("[Character] %s is hungry (Hunger: %.1f%%). Eating..." % [data.character_name, data.hunger])
-			if task_manager:
-				task_manager.push_subtask(TaskManager.Task.new(TaskManager.TaskType.EAT, Vector3.ZERO, null, 80))
-			start_eating()
-		else:
-			var nearest_st = _find_nearest_storage_node()
-			if task_manager and nearest_st:
-				task_manager.push_subtask(TaskManager.Task.new(TaskManager.TaskType.DELIVER, Vector3.ZERO, nearest_st, 60))
-			_go_to_nearest_storage()
+		# A / B / E / F / G
+		_resolve_cargo_action()
 
 func start_eating() -> void:
 	_work_timer = 0.0
@@ -488,6 +791,11 @@ func _process_delivering_unload(delta: float) -> void:
 	if not target_storage or not is_instance_valid(target_storage):
 		_is_unloading_at_storage = false
 		current_state = State.IDLE
+		return
+
+	if not _storage_has_space(target_storage):
+		_is_unloading_at_storage = false
+		_handle_full_storage_with_cargo()
 		return
 
 	var required_time: float = WorkSite.get_time(target_storage, default_deposit_time)
@@ -565,8 +873,11 @@ func move_to_position(target_pos: Vector3) -> void:
 	_release_all_work_points()
 	is_being_dragged = false
 	_is_unloading_at_storage = false
-	target_berries = null
-	target_storage = null
+	_want_storage_meal = false
+	_cargo_drop_timer = 0.0
+	# target_berries — память куста; target_storage — если несём груз, тоже помним
+	if not (data and data.item_amount > 0):
+		target_storage = null
 	target_obstacle = null
 	_current_target_pos = target_pos
 	current_state = State.MOVING
@@ -608,21 +919,16 @@ func start_gathering_at_berries(berries_node: Node3D) -> void:
 		task_manager.set_user_override_task(TaskManager.Task.new(TaskManager.TaskType.GATHER, Vector3.ZERO, berries_node, 10, true))
 
 	var site_ready := WorkSite.can_accept(berries_node, self)
+	var at_site := _at_work_point(berries_node)
 
-	if not is_on_floor():
-		# В воздухе: GATHERING только если есть что собирать, иначе IDLE после приземления
-		current_state = State.GATHERING if site_ready else State.MOVING
+	if at_site and is_on_floor():
+		# Уже у куста на земле
+		current_state = State.GATHERING if site_ready else State.IDLE
 	else:
-		var pos_xz = Vector2(global_position.x, global_position.z)
-		var target_xz = Vector2(_current_target_pos.x, _current_target_pos.z)
-		var at_site := pos_xz.distance_to(target_xz) <= arrival_distance
-		if at_site:
-			# Уже у куста: работаем или спокойно ждём (без thrash)
-			current_state = State.GATHERING if site_ready else State.IDLE
-		else:
-			current_state = State.MOVING
-			if nav_agent:
-				nav_agent.target_position = _current_target_pos
+		# Далеко / в воздухе → идём (или летим дугой) к work point, НЕ gather на месте
+		current_state = State.MOVING
+		if nav_agent:
+			nav_agent.target_position = _current_target_pos
 
 func start_delivering_to_storage(storage_node: Node3D) -> void:
 	if target_storage and is_instance_valid(target_storage) and target_storage != storage_node:
@@ -635,19 +941,15 @@ func start_delivering_to_storage(storage_node: Node3D) -> void:
 	_work_timer = 0.0
 	_current_target_pos = _get_free_work_point_safe(storage_node)
 
-	current_state = State.DELIVERING
-
-	if not is_on_floor():
+	if _at_work_point(storage_node) and is_on_floor():
+		current_state = State.DELIVERING
 		_is_unloading_at_storage = true
 	else:
-		var pos_xz = Vector2(global_position.x, global_position.z)
-		var target_xz = Vector2(_current_target_pos.x, _current_target_pos.z)
-		if pos_xz.distance_to(target_xz) <= arrival_distance:
-			_is_unloading_at_storage = true
-		else:
-			_is_unloading_at_storage = false
-			if nav_agent:
-				nav_agent.target_position = _current_target_pos
+		# Далеко / в воздухе — идём к складу, не разгружаем в поле
+		current_state = State.DELIVERING
+		_is_unloading_at_storage = false
+		if nav_agent:
+			nav_agent.target_position = _current_target_pos
 
 func start_clearing_obstacle(obstacle_node: Node3D) -> void:
 	_release_all_work_points()
@@ -661,17 +963,12 @@ func start_clearing_obstacle(obstacle_node: Node3D) -> void:
 	if task_manager:
 		task_manager.set_user_override_task(TaskManager.Task.new(TaskManager.TaskType.CLEAR, Vector3.ZERO, obstacle_node, 10, true))
 
-	if not is_on_floor():
+	if _at_work_point(obstacle_node) and is_on_floor():
 		current_state = State.CLEARING
 	else:
-		var pos_xz = Vector2(global_position.x, global_position.z)
-		var target_xz = Vector2(_current_target_pos.x, _current_target_pos.z)
-		if pos_xz.distance_to(target_xz) <= arrival_distance:
-			current_state = State.CLEARING
-		else:
-			current_state = State.MOVING
-			if nav_agent:
-				nav_agent.target_position = _current_target_pos
+		current_state = State.MOVING
+		if nav_agent:
+			nav_agent.target_position = _current_target_pos
 
 func _find_nearest_storage_node() -> Node3D:
 	var storages = get_tree().get_nodes_in_group("storage")
@@ -708,33 +1005,44 @@ func _deposit_food_to_storage() -> void:
 			result = WorkSite.do_work(target_storage, self)  # склад сам забирает груз
 		else:
 			# fallback legacy
-			var deposited_amount: int = data.item_amount
-			var carried_type: String = data.carried_item if data.carried_item != "" else "resource"
-			if target_storage.has_method("deposit_food"):
-				target_storage.deposit_food(data.item_amount)
-			data.carried_item = ""
-			data.item_amount = 0
-			result = {"ok": true, "take": {"item": carried_type, "amount": deposited_amount}, "xp_skill": WorkSite.get_skill(target_storage, "trader")}
+			if not _storage_has_space(target_storage):
+				result = {"ok": false, "reason": "full"}
+			else:
+				var deposited_amount: int = data.item_amount
+				var carried_type: String = data.carried_item if data.carried_item != "" else "resource"
+				if target_storage.has_method("deposit_food"):
+					target_storage.deposit_food(data.item_amount)
+				data.carried_item = ""
+				data.item_amount = 0
+				result = {"ok": true, "take": {"item": carried_type, "amount": deposited_amount}, "xp_skill": WorkSite.get_skill(target_storage, "trader")}
 
-		if result.get("ok", false):
-			var xp_skill: String = str(result.get("xp_skill", WorkSite.get_skill(target_storage, "trader")))
-			var xp_per_cycle: float = WorkSite.xp_from_config()
-			if data.has_method("add_skill_xp"):
-				data.add_skill_xp(xp_skill, xp_per_cycle)
-			elif data.has_method("add_skill_exp"):
-				data.add_skill_exp(xp_skill, xp_per_cycle)
-			var take = result.get("take", {})
-			print("[Character] Deposited %s x%d" % [str(take.get("item", "?")), int(take.get("amount", 0))])
+		if not result.get("ok", false):
+			# Склад полон / ошибка — груз остаётся, ждём или едим
+			print("[Character] Deposit failed: %s" % str(result.get("reason", "unknown")))
+			if task_manager:
+				task_manager.complete_current_task()  # снять DELIVER из стека
+			if target_storage and is_instance_valid(target_storage) and target_storage.has_method("release_work_point"):
+				target_storage.release_work_point(self)
+			_handle_full_storage_with_cargo()
+			return
+
+		var xp_skill: String = str(result.get("xp_skill", WorkSite.get_skill(target_storage, "trader")))
+		var xp_per_cycle: float = WorkSite.xp_from_config()
+		if data.has_method("add_skill_xp"):
+			data.add_skill_xp(xp_skill, xp_per_cycle)
+		elif data.has_method("add_skill_exp"):
+			data.add_skill_exp(xp_skill, xp_per_cycle)
+		var take = result.get("take", {})
+		print("[Character] Deposited %s x%d" % [str(take.get("item", "?")), int(take.get("amount", 0))])
 
 	if task_manager:
 		task_manager.complete_current_task()
 
-	# Вернуться к harvest-сайту, если он снова готов
-	if target_berries and is_instance_valid(target_berries):
-		if WorkSite.can_accept(target_berries, self):
+	# Вернуться к harvest только если руки пусты и склад не переполнен (есть смысл)
+	if data and data.item_amount <= 0 and target_berries and is_instance_valid(target_berries):
+		if _storage_has_space() and WorkSite.can_accept(target_berries, self):
 			start_work_at(target_berries)
 			return
-		# иначе ждём в IDLE, память о сайте сохранена
 
 	if target_storage and is_instance_valid(target_storage):
 		if target_storage.has_method("release_work_point"):
