@@ -1,5 +1,8 @@
 Sim game project
 
+2026.10.02
+Char's decisions separated to another file
+
 2026.09.29
 Universal work place (core/WorkSite) for characters added
 
