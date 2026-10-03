@@ -125,17 +125,21 @@ func _handle_character_drop(mouse_position: Vector2) -> void:
 	var result = space_state.intersect_ray(query)
 
 	if result:
-		var collider = result.collider
-		var target_node = _find_interactable_node(collider)
-
-		if target_node:
+		var target_node = _find_interactable_node(result.collider)
+		var land_pos: Vector3 = result.position
+		# Drop ≠ start_work: приземление + think + resolve
+		if selected_character.has_method("on_context_drop"):
+			selected_character.on_context_drop(target_node, land_pos)
+		elif target_node:
 			_assign_task_by_target(selected_character, target_node)
 		else:
-			selected_character.move_to_position(result.position)
+			selected_character.move_to_position(land_pos)
 	else:
-		selected_character.move_to_position(selected_character.global_position)
+		if selected_character.has_method("on_context_drop"):
+			selected_character.on_context_drop(null, selected_character.global_position)
+		else:
+			selected_character.move_to_position(selected_character.global_position)
 
-## Поиск родительского интерактивного объекта
 func _find_interactable_node(collider: Node) -> Node3D:
 	if not collider:
 		return null

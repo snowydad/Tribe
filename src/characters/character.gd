@@ -1,6 +1,6 @@
 # ==============================================================================
 # ФАЙЛ: src/characters/Character.gd
-# ОБНОВЛЕНО: 2026-10-02 22:10 CEST — cut #1: CharacterDecision (матрица + idle)
+# ОБНОВЛЕНО: 2026-10-03 21:16 CEST — on_context_drop + drop think
 # НАЗНАЧЕНИЕ: Контроллер персонажа с зафиксированным инпутом, считыванием .ini
 #            (move_speed, work_speed), поддержкой RVO2 Avoidance для обхода
 #            NavigationObstacle3D, спуском по дуге при Context Drop,
@@ -12,7 +12,7 @@ extends CharacterBody3D
 const CharacterDecisionScript = preload("res://src/characters/CharacterDecision.gd")
 
 # --- СОСТОЯНИЯ ПЕРСОНАЖА (FSM) ---
-enum State { IDLE, MOVING, CARRIED, GATHERING, DELIVERING, CLEARING, EATING }
+enum State { IDLE, MOVING, CARRIED, GATHERING, DELIVERING, CLEARING, EATING, DEAD }
 
 @export_group("Data")
 @export var data: CharacterData
@@ -50,10 +50,18 @@ var _is_unloading_at_storage: bool = false
 ## Решения (матрица hunger/склад/еда) — cut #1
 var decision = CharacterDecisionScript.new()
 
+var drop_site: Node3D = null
+var _awaiting_drop_decide: bool = false
+var _drop_think_left: float = -1.0
+var drop_think_time: float = 2.0
+var wander_radius_min: float = 5.0
+var wander_radius_max: float = 15.0
+
 var work_speed: float = 1.0
 var eat_speed: float = 1.0
 var gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
 var _anim_player: AnimationPlayer = null
+var _death_anim_played: bool = false
 
 func _ready() -> void:
 	if not data:
@@ -83,6 +91,9 @@ func _ready() -> void:
 			arrival_distance = float(ConfigLoader.get_character_value("navigation", "arrival_distance", arrival_distance))
 			docking_distance = float(ConfigLoader.get_character_value("navigation", "docking_distance", docking_distance))
 			decision.cargo_drop_delay = float(ConfigLoader.get_character_value("base_stats", "cargo_drop_delay", decision.cargo_drop_delay))
+			drop_think_time = float(ConfigLoader.get_character_value("base_stats", "drop_think_time", drop_think_time))
+			wander_radius_min = float(ConfigLoader.get_character_value("base_stats", "wander_radius_min", wander_radius_min))
+			wander_radius_max = float(ConfigLoader.get_character_value("base_stats", "wander_radius_max", wander_radius_max))
 		elif ConfigLoader.has_method("get_config_value"):
 			speed = float(ConfigLoader.get_config_value("character", "base_stats", "move_speed", speed))
 			work_speed = float(ConfigLoader.get_config_value("character", "base_stats", "work_speed", work_speed))
@@ -90,6 +101,9 @@ func _ready() -> void:
 			arrival_distance = float(ConfigLoader.get_config_value("character", "navigation", "arrival_distance", arrival_distance))
 			docking_distance = float(ConfigLoader.get_config_value("character", "navigation", "docking_distance", docking_distance))
 			decision.cargo_drop_delay = float(ConfigLoader.get_config_value("character", "base_stats", "cargo_drop_delay", decision.cargo_drop_delay))
+			drop_think_time = float(ConfigLoader.get_config_value("character", "base_stats", "drop_think_time", drop_think_time))
+			wander_radius_min = float(ConfigLoader.get_config_value("character", "base_stats", "wander_radius_min", wander_radius_min))
+			wander_radius_max = float(ConfigLoader.get_config_value("character", "base_stats", "wander_radius_max", wander_radius_max))
 
 	# Настройка агента и подключение RVO2 Avoidance
 	if nav_agent:
@@ -108,11 +122,24 @@ func _ready() -> void:
 func _physics_process(delta: float) -> void:
 	if data:
 		data.update_needs(delta, _needs_activity())
+		# Смерть: health <= 0
+	if data and data.health <= 0.0:
+		if current_state != State.DEAD:
+			_die()
+		velocity = Vector3.ZERO
+		_update_animation()
+		_dev_ui_timer += delta
+		if _dev_ui_timer >= 0.2:
+			_dev_ui_timer = 0.0
+			_update_dev_ui()
+		return
 
 	# 1. Захват в воздухе (Drag & Drop)
 	if is_being_dragged:
 		velocity = Vector3.ZERO
 		current_state = State.CARRIED
+		_drop_think_left = -1.0
+		_awaiting_drop_decide = false
 		_update_animation()
 		_update_dev_ui()
 		return
@@ -125,8 +152,18 @@ func _physics_process(delta: float) -> void:
 	match current_state:
 		State.IDLE:
 			_stop_horizontal_movement(delta)
-			decision.process_idle(delta)
-			move_and_slide()
+			if _drop_think_left >= 0.0:
+				_drop_think_left -= delta
+				if _drop_think_left <= 0.0:
+					_drop_think_left = -1.0
+					_awaiting_drop_decide = false
+					var site = drop_site
+					drop_site = null
+					decision.resolve_after_drop(site)
+				move_and_slide()
+			else:
+				decision.process_idle(delta)
+				move_and_slide()
 
 		State.CARRIED:
 			_stop_horizontal_movement(delta)
@@ -204,11 +241,16 @@ func _update_animation() -> void:
 
 	var target_anim: String = "idle"
 	match current_state:
+		State.DEAD:
+			target_anim = "die"
 		State.IDLE, State.CARRIED:
 			target_anim = "idle"
 		State.MOVING:
 			target_anim = "walk"
-		State.GATHERING, State.CLEARING, State.EATING:
+		State.EATING:
+			# клип "eat", иначе fallback "work"
+			target_anim = "eat" if _anim_player.has_animation("eat") else "work"
+		State.GATHERING, State.CLEARING:
 			target_anim = "work"
 		State.DELIVERING:
 			if _is_unloading_at_storage:
@@ -216,9 +258,34 @@ func _update_animation() -> void:
 			else:
 				target_anim = "walk"
 
-	if _anim_player.has_animation(target_anim):
-		if _anim_player.current_animation != target_anim:
-			_anim_player.play(target_anim)
+	if not _anim_player.has_animation(target_anim):
+		return
+	# die — один раз, не рестартить каждый кадр
+	if target_anim == "die":
+		if _death_anim_played:
+			return
+		var anim := _anim_player.get_animation("die")
+		if anim:
+			anim.loop_mode = Animation.LOOP_NONE
+		_anim_player.play("die")
+		_death_anim_played = true
+		return
+
+	if _anim_player.current_animation != target_anim:
+		_anim_player.play(target_anim)
+		
+func _die() -> void:
+	is_being_dragged = false
+	_drop_think_left = -1.0
+	_awaiting_drop_decide = false
+	_is_unloading_at_storage = false
+	_release_all_work_points()
+	if task_manager:
+		task_manager.clear_all()
+	velocity = Vector3.ZERO
+	_death_anim_played = false
+	current_state = State.DEAD
+	print("[Character] %s died (health=0)" % (data.character_name if data else "?"))
 
 func _find_animation_player(node: Node) -> AnimationPlayer:
 	if not node:
@@ -314,57 +381,27 @@ func _rotate_towards_target(target_node: Node3D, delta: float) -> void:
 
 func _on_movement_finished() -> void:
 	if current_state == State.MOVING:
-		# Пришли поесть со склада — только у склада
+		# После context drop — think, не work
+		if _awaiting_drop_decide:
+			_begin_drop_think()
+			return
+
 		if decision.want_storage_meal and target_storage and is_instance_valid(target_storage):
 			if _at_work_point(target_storage):
 				if decision.withdraw_one_and_eat(target_storage):
 					return
 			decision.want_storage_meal = false
-			# не у склада — дойти
 			if not _at_work_point(target_storage):
 				decision.go_eat_from_storage()
 				return
 			current_state = State.IDLE
 			return
 
-		# Закрыть MOVE_TO, если это был drop / приказ «иди сюда»
-		var was_move_to := false
 		if task_manager and task_manager.get_current_task():
 			var cur_t = task_manager.get_current_task()
 			if cur_t and cur_t.type == TaskManager.TaskType.MOVE_TO:
 				task_manager.complete_current_task()
-				was_move_to = true
 
-		# После drop: work только у site. С грузом — сначала склад, потом куст.
-		if decision.hands_busy() and target_storage and is_instance_valid(target_storage):
-			if _at_work_point(target_storage):
-				current_state = State.DELIVERING
-				_is_unloading_at_storage = true
-				_work_timer = 0.0
-			else:
-				start_delivering_to_storage(target_storage)
-			return
-
-		if target_obstacle and is_instance_valid(target_obstacle):
-			if _at_work_point(target_obstacle):
-				current_state = State.CLEARING
-				_work_timer = 0.0
-			else:
-				start_clearing_obstacle(target_obstacle)
-			return
-
-		if not decision.hands_busy() and target_berries and is_instance_valid(target_berries):
-			if _at_work_point(target_berries):
-				if WorkSite.can_accept(target_berries, self):
-					current_state = State.GATHERING
-					_work_timer = 0.0
-				else:
-					current_state = State.IDLE
-			else:
-				start_gathering_at_berries(target_berries)
-			return
-
-		# Груз есть, склада в памяти нет — nearest storage / matrix
 		if decision.hands_busy():
 			decision.resolve_cargo_action()
 			return
@@ -453,6 +490,8 @@ func _process_gathering(delta: float) -> void:
 
 	_work_timer += delta * current_work_speed
 	if _work_timer >= required_time:
+
+
 		_work_timer = 0.0
 		var result: Dictionary = WorkSite.do_work(target_berries, self)
 		if not result.get("ok", false):
@@ -599,6 +638,65 @@ func move_to_position(target_pos: Vector3) -> void:
 	if nav_agent:
 		nav_agent.target_position = target_pos
 
+
+## Context Drop: объект или пустое. Не start_work — приземление + think.
+func on_context_drop(site: Node3D, land_pos: Vector3) -> void:
+	is_being_dragged = false
+	_is_unloading_at_storage = false
+	decision.want_storage_meal = false
+	_drop_think_left = -1.0
+	drop_site = site if site and is_instance_valid(site) else null
+	_awaiting_drop_decide = true
+
+	var dest: Vector3 = land_pos
+	if drop_site:
+		dest = _get_free_work_point_safe(drop_site)
+		var cat := WorkSite.get_category(drop_site)
+		if cat == "harvest":
+			target_berries = drop_site
+		elif cat == "deposit":
+			target_storage = drop_site
+		elif cat == "clear":
+			target_obstacle = drop_site
+
+	_soft_move_to(dest)
+	var flat = Vector3(dest.x, global_position.y, dest.z)
+	if is_on_floor() and global_position.distance_to(flat) <= maxf(arrival_distance, 0.5):
+		_begin_drop_think()
+
+
+## Движение без set_user_override — очередь (persistent GATHER и т.д.) жива
+func _soft_move_to(target_pos: Vector3) -> void:
+	_release_all_work_points()
+	_current_target_pos = target_pos
+	current_state = State.MOVING
+	if nav_agent:
+		nav_agent.target_position = target_pos
+
+
+func _begin_drop_think() -> void:
+	current_state = State.IDLE
+	_awaiting_drop_decide = true
+	_drop_think_left = maxf(0.05, drop_think_time)
+	if data:
+		print("[Character] %s drop-think %.1fs (site=%s)" % [
+			data.character_name,
+			_drop_think_left,
+			drop_site.name if drop_site and is_instance_valid(drop_site) else "empty"
+		])
+
+
+func wander_nearby() -> void:
+	_awaiting_drop_decide = false
+	_drop_think_left = -1.0
+	var r: float = randf_range(wander_radius_min, wander_radius_max)
+	var a: float = randf() * TAU
+	var dest: Vector3 = global_position + Vector3(cos(a) * r, 0.0, sin(a) * r)
+	dest.y = global_position.y
+	print("[Character] %s wander ~%.0fm" % [data.character_name if data else "?", r])
+	_soft_move_to(dest)
+
+
 ## Универсальная точка входа: объект сам говорит, какой это тип работы (ini / WorkSite).
 func start_work_at(site: Node3D) -> void:
 	if not site or not is_instance_valid(site):
@@ -644,6 +742,13 @@ func start_gathering_at_berries(berries_node: Node3D) -> void:
 			nav_agent.target_position = _current_target_pos
 
 func start_delivering_to_storage(storage_node: Node3D) -> void:
+	if not storage_node or not is_instance_valid(storage_node):
+		return
+	if not (data and data.item_amount > 0):
+		_is_unloading_at_storage = false
+		current_state = State.IDLE
+		return
+
 	if target_storage and is_instance_valid(target_storage) and target_storage != storage_node:
 		if target_storage.has_method("release_work_point"):
 			target_storage.release_work_point(self)
@@ -658,11 +763,11 @@ func start_delivering_to_storage(storage_node: Node3D) -> void:
 		current_state = State.DELIVERING
 		_is_unloading_at_storage = true
 	else:
-		# Далеко / в воздухе — идём к складу, не разгружаем в поле
 		current_state = State.DELIVERING
 		_is_unloading_at_storage = false
 		if nav_agent:
 			nav_agent.target_position = _current_target_pos
+
 
 func start_clearing_obstacle(obstacle_node: Node3D) -> void:
 	_release_all_work_points()

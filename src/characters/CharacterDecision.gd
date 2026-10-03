@@ -1,6 +1,6 @@
 # ==============================================================================
 # ФАЙЛ: src/characters/CharacterDecision.gd
-# ОБНОВЛЕНО: 2026-10-02 23:23 CEST — full storage + hunger>25 → eat from storage (not bush)
+# ОБНОВЛЕНО: 2026-10-03 21:16 CEST — resolve_after_drop
 # НАЗНАЧЕНИЕ: Решения что делать (есть / сдать / собирать / ждать).
 #            Не двигает персонажа сам — зовёт host.start_* / host.move_*.
 # ==============================================================================
@@ -258,6 +258,115 @@ func handle_full_storage_with_cargo() -> bool:
 		return false
 	resolve_cargo_action()
 	return true
+
+
+# --- DROP: после think — одно решение ---
+
+func site_has_work(site: Node3D) -> bool:
+	if not site or not is_instance_valid(site):
+		return false
+	var cat := WorkSite.get_category(site)
+	match cat:
+		"deposit":
+			return hands_busy() and storage_has_space(site)
+		"harvest":
+			return (not hands_busy()) and WorkSite.can_accept(site, host)
+		"clear":
+			return WorkSite.can_accept(site, host)
+		_:
+			return WorkSite.can_accept(site, host)
+
+
+func has_talent_for_site(site: Node3D) -> bool:
+	if not site or not is_instance_valid(site):
+		return false
+	if WorkSite.get_category(site) == "deposit":
+		return true
+	var skill := WorkSite.get_skill(site, "").strip_edges().to_lower()
+	if skill.is_empty():
+		return true
+	var d = _data()
+	if not d:
+		return false
+	var talent := str(d.talent).strip_edges().to_lower()
+	if talent == skill:
+		return true
+	if ConfigLoader and ConfigLoader.has_method("get_skill_value"):
+		var raw = str(ConfigLoader.get_skill_value("talents_skills", talent, ""))
+		raw = raw.replace('"', "").replace("'", "")
+		for part in raw.split(","):
+			if part.strip_edges().to_lower() == skill:
+				return true
+	return false
+
+
+func resolve_after_drop(drop_site: Node3D = null) -> void:
+	var d = _data()
+	var tm = _tm()
+
+	if should_eat_from_hands():
+		start_eat_hands()
+		return
+
+	if hands_busy():
+		if drop_site and is_instance_valid(drop_site) and WorkSite.get_category(drop_site) == "deposit":
+			if storage_has_space(drop_site):
+				host.start_delivering_to_storage(drop_site)
+				return
+			handle_full_storage_with_cargo()
+			return
+		resolve_cargo_action()
+		return
+
+	if should_eat_from_storage():
+		go_eat_from_storage()
+		return
+
+	if tm and tm.has_tasks():
+		var cur = tm.get_current_task()
+		if cur:
+			match cur.type:
+				TaskManager.TaskType.GATHER:
+					if cur.target_node and is_instance_valid(cur.target_node) and site_has_work(cur.target_node):
+						host.start_gathering_at_berries(cur.target_node)
+						return
+				TaskManager.TaskType.DELIVER:
+					if hands_busy() and cur.target_node and is_instance_valid(cur.target_node) and storage_has_space(cur.target_node):
+						host.start_delivering_to_storage(cur.target_node)
+						return
+				TaskManager.TaskType.CLEAR:
+					if cur.target_node and is_instance_valid(cur.target_node) and site_has_work(cur.target_node):
+						host.start_clearing_obstacle(cur.target_node)
+						return
+				TaskManager.TaskType.EAT:
+					if has_edible_cargo():
+						host.start_eating()
+						return
+					tm.complete_current_task()
+				_:
+					pass
+
+	if drop_site and is_instance_valid(drop_site):
+		if site_has_work(drop_site) and has_talent_for_site(drop_site):
+			host.start_work_at(drop_site)
+			return
+		if site_has_work(drop_site) and not has_talent_for_site(drop_site):
+			host.wander_nearby()
+			return
+		host.current_state = host.State.IDLE
+		return
+
+	if knows_berries() and site_has_work(host.target_berries):
+		host.start_work_at(host.target_berries)
+		return
+	if should_go_forage() and knows_berries():
+		host.start_work_at(host.target_berries)
+		return
+
+	if d and d.hunger <= 25.0:
+		host.wander_nearby()
+	else:
+		host.current_state = host.State.IDLE
 
 
 # --- IDLE: матрица + TaskManager + poll куста ---
