@@ -158,7 +158,7 @@ func _assign_task_by_target(character: CharacterBody3D, target: Node3D) -> void:
 		return
 	# Legacy fallback
 	if target.has_method("harvest_berry"):
-		character.start_gathering_at_berries(target)
+		character.start_harvesting(target)
 	elif target.has_method("clear_obstacle") or target.is_in_group("obstacle"):
 		character.start_clearing_obstacle(target)
 	elif target.has_method("deposit_food") or target.is_in_group("storage"):

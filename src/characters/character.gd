@@ -1,6 +1,6 @@
 # ==============================================================================
 # ФАЙЛ: src/characters/Character.gd
-# ОБНОВЛЕНО: 2026-10-03 21:16 CEST — on_context_drop + drop think
+# ОБНОВЛЕНО: 2026-10-04 13:59 CEST — de-berry: target_harvest / start_harvesting
 # НАЗНАЧЕНИЕ: Контроллер персонажа с зафиксированным инпутом, считыванием .ini
 #            (move_speed, work_speed), поддержкой RVO2 Avoidance для обхода
 #            NavigationObstacle3D, спуском по дуге при Context Drop,
@@ -38,7 +38,7 @@ var current_state: State = State.IDLE
 var is_selected: bool = false
 var is_being_dragged: bool = false
 
-var target_berries: Node3D = null
+var target_harvest: Node3D = null  # любой harvest WorkSite (ягоды, бананы, …)
 var target_storage: Node3D = null
 var target_obstacle: Node3D = null
 
@@ -182,7 +182,7 @@ func _physics_process(delta: float) -> void:
 				move_and_slide()
 			else:
 				_stop_horizontal_movement(delta)
-				_rotate_towards_target(target_berries, delta)
+				_rotate_towards_target(target_harvest, delta)
 				_process_gathering(delta)
 				move_and_slide()
 
@@ -470,19 +470,19 @@ func _at_work_point(site: Node3D = null) -> bool:
 # --- РАБОЧИЕ ПРОЦЕССЫ ---
 
 func _process_gathering(delta: float) -> void:
-	if not target_berries or not is_instance_valid(target_berries):
+	if not target_harvest or not is_instance_valid(target_harvest):
 		current_state = State.IDLE
 		return
 
-	# Готовность — у объекта (WorkSite), не has_berries в персе
-	if not WorkSite.can_accept(target_berries, self):
+	# Готовность — у объекта (WorkSite)
+	if not WorkSite.can_accept(target_harvest, self):
 		current_state = State.IDLE
 		decision._idle_check_timer = 0.0  # ждать полсекунды (idle poll)
-		# target_berries помним — idle-поллер / task GATHER возобновит, когда can_accept true
+		# target_harvest помним — idle/GATHER возобновит, когда can_accept
 		return
 
-	var required_time: float = WorkSite.get_time(target_berries, default_gather_time)
-	var skill_key: String = WorkSite.get_skill(target_berries, "forager")
+	var required_time: float = WorkSite.get_time(target_harvest, default_gather_time)
+	var skill_key: String = WorkSite.get_skill(target_harvest, "forager")
 	var current_work_speed: float = work_speed
 	if data and data.has_method("get_effective_work_speed"):
 		current_work_speed = data.get_effective_work_speed(skill_key)
@@ -493,7 +493,7 @@ func _process_gathering(delta: float) -> void:
 
 
 		_work_timer = 0.0
-		var result: Dictionary = WorkSite.do_work(target_berries, self)
+		var result: Dictionary = WorkSite.do_work(target_harvest, self)
 		if not result.get("ok", false):
 			current_state = State.IDLE
 			return
@@ -525,19 +525,30 @@ func _process_eating(delta: float) -> void:
 	_work_timer += delta
 	if _work_timer >= req_eat_time:
 		_work_timer = 0.0
-		var nut_val: float = 25.0
-		if target_berries and is_instance_valid(target_berries):
-			if target_berries.has_method("get_nutrition_value"):
-				nut_val = float(target_berries.get_nutrition_value())
-			elif "nutrition_value" in target_berries:
-				nut_val = float(target_berries.nutrition_value)
+		var nut_val: float = _nutrition_for_carried()
+		var item_name: String = data.carried_item if data.carried_item != "" else "food"
 		data.eat_food(nut_val)
 		data.carried_item = ""
 		data.item_amount = 0
-		print("[Character] %s finished eating berry! New hunger: %.1f%%" % [data.character_name, data.hunger])
+		print("[Character] %s finished eating %s! New hunger: %.1f%%" % [data.character_name, item_name, data.hunger])
 		if task_manager:
 			task_manager.complete_current_task()
 		current_state = State.IDLE
+
+
+## Nutrition по carried item (не привязка к кусту ягод)
+func _nutrition_for_carried() -> float:
+	# Позже: таблица items.ini. Пока — разумные дефолты по типу груза.
+	var item := str(data.carried_item).strip_edges().to_lower() if data else ""
+	match item:
+		"berry", "berries":
+			return 25.0
+		"banana", "bananas":
+			return 30.0
+		"mushroom", "fish", "fruit", "food":
+			return 25.0
+		_:
+			return 25.0
 
 func _process_delivering_unload(delta: float) -> void:
 	if not target_storage or not is_instance_valid(target_storage):
@@ -611,9 +622,9 @@ func _process_clearing(delta: float) -> void:
 # --- КОМАНДЫ И ВЗАИМОДЕЙСТВИЕ ---
 
 func _release_all_work_points() -> void:
-	if target_berries and is_instance_valid(target_berries):
-		if target_berries.has_method("release_work_point"):
-			target_berries.release_work_point(self)
+	if target_harvest and is_instance_valid(target_harvest):
+		if target_harvest.has_method("release_work_point"):
+			target_harvest.release_work_point(self)
 	if target_storage and is_instance_valid(target_storage):
 		if target_storage.has_method("release_work_point"):
 			target_storage.release_work_point(self)
@@ -627,7 +638,7 @@ func move_to_position(target_pos: Vector3) -> void:
 	_is_unloading_at_storage = false
 	decision.want_storage_meal = false
 	decision._cargo_drop_timer = 0.0
-	# target_berries — память куста; target_storage — если несём груз, тоже помним
+	# target_harvest — память harvest-site; target_storage — склад
 	if not (data and data.item_amount > 0):
 		target_storage = null
 	target_obstacle = null
@@ -653,7 +664,7 @@ func on_context_drop(site: Node3D, land_pos: Vector3) -> void:
 		dest = _get_free_work_point_safe(drop_site)
 		var cat := WorkSite.get_category(drop_site)
 		if cat == "harvest":
-			target_berries = drop_site
+			target_harvest = drop_site
 		elif cat == "deposit":
 			target_storage = drop_site
 		elif cat == "clear":
@@ -704,7 +715,7 @@ func start_work_at(site: Node3D) -> void:
 	var category := WorkSite.get_category(site)
 	match category:
 		"harvest":
-			start_gathering_at_berries(site)
+			start_harvesting(site)
 		"deposit":
 			start_delivering_to_storage(site)
 		"clear":
@@ -717,20 +728,25 @@ func start_work_at(site: Node3D) -> void:
 			# fallback: work point walk
 			move_to_position(_get_free_work_point_safe(site))
 
-func start_gathering_at_berries(berries_node: Node3D) -> void:
+## @deprecated имя; используй start_harvesting
+func start_gathering_at_berries(site: Node3D) -> void:
+	start_harvesting(site)
+
+
+func start_harvesting(site: Node3D) -> void:
 	_release_all_work_points()
 	is_being_dragged = false
 	_is_unloading_at_storage = false
-	target_berries = berries_node
+	target_harvest = site
 	target_obstacle = null
 	_work_timer = 0.0
-	_current_target_pos = _get_free_work_point_safe(berries_node)
+	_current_target_pos = _get_free_work_point_safe(site)
 
 	if task_manager:
-		task_manager.set_user_override_task(TaskManager.Task.new(TaskManager.TaskType.GATHER, Vector3.ZERO, berries_node, 10, true))
+		task_manager.set_user_override_task(TaskManager.Task.new(TaskManager.TaskType.GATHER, Vector3.ZERO, site, 10, true))
 
-	var site_ready := WorkSite.can_accept(berries_node, self)
-	var at_site := _at_work_point(berries_node)
+	var site_ready := WorkSite.can_accept(site, self)
+	var at_site := _at_work_point(site)
 
 	if at_site and is_on_floor():
 		# Уже у куста на земле
@@ -774,7 +790,7 @@ func start_clearing_obstacle(obstacle_node: Node3D) -> void:
 	is_being_dragged = false
 	_is_unloading_at_storage = false
 	target_obstacle = obstacle_node
-	target_berries = null
+	target_harvest = null
 	_work_timer = 0.0
 	_current_target_pos = _get_free_work_point_safe(obstacle_node)
 
@@ -857,9 +873,9 @@ func _deposit_food_to_storage() -> void:
 		task_manager.complete_current_task()
 
 	# Вернуться к harvest только если руки пусты и склад не переполнен (есть смысл)
-	if data and data.item_amount <= 0 and target_berries and is_instance_valid(target_berries):
-		if decision.storage_has_space() and WorkSite.can_accept(target_berries, self):
-			start_work_at(target_berries)
+	if data and data.item_amount <= 0 and target_harvest and is_instance_valid(target_harvest):
+		if decision.storage_has_space() and WorkSite.can_accept(target_harvest, self):
+			start_work_at(target_harvest)
 			return
 
 	if target_storage and is_instance_valid(target_storage):
@@ -920,8 +936,8 @@ func _update_dev_ui() -> void:
 		forager_lvl = data.skills["forager"].get("level", 0)
 	
 	var site_hint := "-"
-	if target_berries and is_instance_valid(target_berries):
-		site_hint = "H:" + WorkSite.get_type(target_berries)
+	if target_harvest and is_instance_valid(target_harvest):
+		site_hint = "H:" + WorkSite.get_type(target_harvest)
 	elif target_storage and is_instance_valid(target_storage):
 		site_hint = "D:" + WorkSite.get_type(target_storage)
 

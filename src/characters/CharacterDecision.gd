@@ -1,6 +1,6 @@
 # ==============================================================================
 # ФАЙЛ: src/characters/CharacterDecision.gd
-# ОБНОВЛЕНО: 2026-10-03 21:16 CEST — resolve_after_drop
+# ОБНОВЛЕНО: 2026-10-04 13:59 CEST — de-berry: knows_harvest / target_harvest
 # НАЗНАЧЕНИЕ: Решения что делать (есть / сдать / собирать / ждать).
 #            Не двигает персонажа сам — зовёт host.start_* / host.move_*.
 # ==============================================================================
@@ -35,8 +35,8 @@ func hands_busy() -> bool:
 	return d != null and d.item_amount > 0
 
 
-func knows_berries() -> bool:
-	return host.target_berries != null and is_instance_valid(host.target_berries)
+func knows_harvest() -> bool:
+	return host.target_harvest != null and is_instance_valid(host.target_harvest)
 
 
 func has_edible_cargo() -> bool:
@@ -44,7 +44,7 @@ func has_edible_cargo() -> bool:
 		return false
 	var d = _data()
 	var item := str(d.carried_item).strip_edges().to_lower()
-	return item in ["berry", "berries", "fruit", "food", "mushroom", "fish"] or item.is_empty()
+	return item in ["berry", "berries", "banana", "bananas", "fruit", "food", "mushroom", "fish"] or item.is_empty()
 
 
 func storage_has_space(st: Node = null) -> bool:
@@ -147,7 +147,7 @@ func should_eat_from_storage() -> bool:
 	return storage_has_food()
 
 
-## D: руки пусты + hunger > 25 + склад пуст (0 еды) + знает куст.
+## D: руки пусты + hunger > 25 + склад пуст (0 еды) + знает harvest-site.
 ## Full склад с едой → НЕ на куст (только eat storage).
 func should_go_forage() -> bool:
 	if hands_busy() or not _data():
@@ -160,7 +160,7 @@ func should_go_forage() -> bool:
 	# full без еды — странно, но на куст тоже не рвёмся пока full
 	if storage_is_full():
 		return false
-	return knows_berries()
+	return knows_harvest()
 
 
 func start_eat_hands() -> void:
@@ -222,7 +222,7 @@ func withdraw_one_and_eat(st: Node) -> bool:
 	var got: int = int(st.withdraw_food(1))
 	if got <= 0:
 		return false
-	d.carried_item = "berry"
+	d.carried_item = "food"  # тип еды со склада; later item table
 	d.item_amount = got
 	print("[Character] %s took food from storage (-%d)" % [d.character_name, got])
 	want_storage_meal = false
@@ -328,7 +328,7 @@ func resolve_after_drop(drop_site: Node3D = null) -> void:
 			match cur.type:
 				TaskManager.TaskType.GATHER:
 					if cur.target_node and is_instance_valid(cur.target_node) and site_has_work(cur.target_node):
-						host.start_gathering_at_berries(cur.target_node)
+						host.start_harvesting(cur.target_node)
 						return
 				TaskManager.TaskType.DELIVER:
 					if hands_busy() and cur.target_node and is_instance_valid(cur.target_node) and storage_has_space(cur.target_node):
@@ -356,11 +356,11 @@ func resolve_after_drop(drop_site: Node3D = null) -> void:
 		host.current_state = host.State.IDLE
 		return
 
-	if knows_berries() and site_has_work(host.target_berries):
-		host.start_work_at(host.target_berries)
+	if knows_harvest() and site_has_work(host.target_harvest):
+		host.start_work_at(host.target_harvest)
 		return
-	if should_go_forage() and knows_berries():
-		host.start_work_at(host.target_berries)
+	if should_go_forage() and knows_harvest():
+		host.start_work_at(host.target_harvest)
 		return
 
 	if d and d.hunger <= 25.0:
@@ -401,8 +401,8 @@ func process_idle(delta: float) -> void:
 		return
 
 	if should_go_forage():
-		if WorkSite.can_accept(host.target_berries, host):
-			host.start_work_at(host.target_berries)
+		if WorkSite.can_accept(host.target_harvest, host):
+			host.start_work_at(host.target_harvest)
 			return
 
 	var tm = _tm()
@@ -413,7 +413,7 @@ func process_idle(delta: float) -> void:
 			match cur_task.type:
 				TaskManager.TaskType.GATHER:
 					if cur_task.target_node and is_instance_valid(cur_task.target_node):
-						host.target_berries = cur_task.target_node
+						host.target_harvest = cur_task.target_node
 						# Full: не ходим на куст. hunger>25 → жрём со склада.
 						if storage_is_full():
 							if d and d.hunger > 25.0 and storage_has_food():
@@ -424,7 +424,7 @@ func process_idle(delta: float) -> void:
 							go_eat_from_storage()
 							return
 						if WorkSite.can_accept(cur_task.target_node, host):
-							host.start_gathering_at_berries(cur_task.target_node)
+							host.start_harvesting(cur_task.target_node)
 						return
 				TaskManager.TaskType.DELIVER:
 					if cur_task.target_node and is_instance_valid(cur_task.target_node):
@@ -456,24 +456,24 @@ func process_idle(delta: float) -> void:
 					return
 
 	# Poll: куст созрел / full → склад
-	if knows_berries() or storage_is_full():
+	if knows_harvest() or storage_is_full():
 		_idle_check_timer += delta
 		if _idle_check_timer >= 0.5:
 			_idle_check_timer = 0.0
 			if d and d.item_amount > 0:
 				return
-			# Full + hunger > 25 → склад (даже без knows_berries)
+			# Full + hunger > 25 → склад (даже без knows_harvest)
 			if storage_is_full() and d and d.hunger > 25.0 and storage_has_food():
 				go_eat_from_storage()
 				return
-			if not knows_berries():
+			if not knows_harvest():
 				return
 			# куст только если склад НЕ full и нет еды / есть место под сдачу
 			if d and d.hunger > 25.0 and not storage_has_food():
-				if WorkSite.can_accept(host.target_berries, host):
-					host.start_work_at(host.target_berries)
+				if WorkSite.can_accept(host.target_harvest, host):
+					host.start_work_at(host.target_harvest)
 				return
 			if d and d.hunger <= 25.0 and storage_has_space():
-				if WorkSite.can_accept(host.target_berries, host):
+				if WorkSite.can_accept(host.target_harvest, host):
 					print("[Character] %s: work site ready, resuming..." % d.character_name)
-					host.start_work_at(host.target_berries)
+					host.start_work_at(host.target_harvest)
