@@ -1,5 +1,6 @@
 # ==============================================================================
 # ФАЙЛ: src/autoload/ConfigLoader.gd
+# ОБНОВЛЕНО: 2026-10-04 15:11 CEST — items.ini API
 # НАЗНАЧЕНИЕ: Глобальный синглтон для чтения конфигурационных .ini файлов проекта.
 #             Поддерживает автозагрузку всех конфигов из assets/config/,
 #             универсальный метод get_config_value(config_name, section, key),
@@ -23,7 +24,8 @@ var _aliases: Dictionary = {
 	"storage": "storage",
 	"obstacle": "obstacle",
 	"shelter": "shelter",
-	"names": "names"
+	"names": "names",
+	"items": "items"
 }
 
 # Ссылки для 100% обратной совместимости
@@ -133,7 +135,7 @@ func get_section_keys(config_name: String, section: String) -> PackedStringArray
 
 ## Универсальный метод сквозного поиска по базовым конфигам (для TimeManager и др.)
 func get_value(section: String, key: String, default_value: Variant = null) -> Variant:
-	var search_order = ["game_config", "character", "character_skills", "berries", "storage", "obstacle", "shelter"]
+	var search_order = ["game_config", "character", "character_skills", "items", "berries", "storage", "obstacle", "shelter"]
 	for cfg_name in search_order:
 		var cfg = get_config_file(cfg_name)
 		if cfg and cfg.has_section_key(section, key):
@@ -167,3 +169,47 @@ func get_obstacle_value(section: String, key: String, default_value: Variant = n
 ## Получение значений из shelter.ini
 func get_shelter_value(section: String, key: String, default_value: Variant = null) -> Variant:
 	return get_config_value("shelter", section, key, default_value)
+
+# ==============================================================================
+# ITEMS.INI — edible / nutrition (новые продукты — в items.ini, не в character)
+# ==============================================================================
+
+func resolve_item_id(raw_id: String) -> String:
+	var id := str(raw_id).strip_edges().to_lower()
+	if id.is_empty():
+		return "food"
+	var alias = get_config_value("items", "aliases", id, null)
+	if alias != null and str(alias).strip_edges() != "":
+		return str(alias).strip_edges().to_lower()
+	if has_config_key("items", id, "edible") or has_config_key("items", id, "nutrition"):
+		return id
+	if id.ends_with("s") and id.length() > 1:
+		var singular := id.substr(0, id.length() - 1)
+		if has_config_key("items", singular, "edible") or has_config_key("items", singular, "nutrition"):
+			return singular
+	return id
+
+
+func get_item_value(item_id: String, key: String, default_value: Variant = null) -> Variant:
+	return get_config_value("items", resolve_item_id(item_id), key, default_value)
+
+
+func is_item_edible(item_id: String, default_if_unknown: bool = false) -> bool:
+	if str(item_id).strip_edges().is_empty():
+		return bool(get_item_value("food", "edible", true))
+	var id := resolve_item_id(item_id)
+	if has_config_key("items", id, "edible"):
+		return bool(get_item_value(id, "edible", default_if_unknown))
+	return default_if_unknown
+
+
+func get_item_nutrition(item_id: String, default_value: float = 25.0) -> float:
+	var id := resolve_item_id(item_id)
+	if str(item_id).strip_edges().is_empty():
+		id = "food"
+	return float(get_item_value(id, "nutrition", default_value))
+
+
+func get_item_display_name(item_id: String) -> String:
+	var id := resolve_item_id(item_id)
+	return str(get_item_value(id, "display_name", id))

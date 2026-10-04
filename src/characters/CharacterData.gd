@@ -1,5 +1,4 @@
 # ==============================================================================
-# ФАЙЛ: src/characters/CharacterData.gd
 # НАЗНАЧЕНИЕ: Ресурс хранения персональных данных, физических статов,
 #             врождённых талантов, приобретаемых навыков и инвентаря.
 # ==============================================================================
@@ -18,6 +17,7 @@ enum Gender { MALE, FEMALE }
 # ------------------------------------------------------------------------------
 # 2. ШКАЛЫ ПОТРЕБНОСТЕЙ И ЗДОРОВЬЯ
 # ------------------------------------------------------------------------------
+@export var death_cause: String = ""  # "", "starvation", "exhaustion", "old_age", "needs"
 @export var health: float = 100.0   # 100.0 = здоров, 0.0 = смерть
 @export var hunger: float = 0.0     # 0.0 = сыт, 100.0 = умирает от голода
 @export var energy: float = 75.0    # бодрость 0..100; старт из character.ini [initial_stats] energy
@@ -193,8 +193,18 @@ func update_needs(delta: float, activity: String = "rest") -> void:
 
 	if health <= 0.0:
 		health = 0.0
-		print("[CharacterData] %s died (needs). hunger=%.0f energy=%.0f" % [character_name, hunger, energy])
-		character_died.emit("needs")
+		if death_cause == "":
+			# причина по доминирующему порогу
+			if hunger > thr_hunger and energy < thr_energy:
+				death_cause = "starvation+exhaustion"
+			elif hunger > thr_hunger:
+				death_cause = "starvation"
+			elif energy < thr_energy:
+				death_cause = "exhaustion"
+			else:
+				death_cause = "needs"
+		print("[CharacterData] %s died (%s). hunger=%.0f energy=%.0f" % [character_name, death_cause, hunger, energy])
+		character_died.emit(death_cause)
 		data_changed.emit()
 		return
 
@@ -239,6 +249,7 @@ func _on_year_passed(_total_years: int) -> void:
 		var death_chance = (age - 60) * 0.05
 		if randf() < death_chance:
 			health = 0.0
+			death_cause = "old_age"
 			print("[CharacterData] %s died of old age at %d" % [character_name, age])
 			character_died.emit("old_age")
 

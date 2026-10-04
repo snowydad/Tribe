@@ -1,5 +1,6 @@
 # ==============================================================================
 # CharacterInfoPanel.gd — HUD: FPS + время + инфо выбранного перса
+# ОБНОВЛЕНО: 2026-10-04 17:05 CEST — action dead + death cause
 # res://src/ui/CharacterInfoPanel.gd
 # ==============================================================================
 extends PanelContainer
@@ -118,8 +119,11 @@ func _format_character_block() -> String:
 	lines.append("HP:%.0f Hunger:%.0f Energy:%.0f" % [hp, hunger, energy])
 	# forager:2 | worker:1 | …
 	lines.append(_format_skills_line(d))
-	# action: gathering | walk | carry:berry3 | delivering:berry3 | idle
+	# action: gather | walk | dead (starvation) | …
 	lines.append("action: %s" % _format_current_action())
+	var death_line := _format_death_line(d)
+	if death_line != "":
+		lines.append(death_line)
 	# speed / work / velocity
 	lines.append(_format_speeds_line())
 	return "\n".join(lines)
@@ -148,7 +152,7 @@ func _format_current_action() -> String:
 	var ch = _selected
 	var state_val = ch.get("current_state")
 	var state_name := "idle"
-	# enum State { IDLE, MOVING, CARRIED, GATHERING, DELIVERING, CLEARING, EATING }
+	# enum State { IDLE, MOVING, CARRIED, GATHERING, DELIVERING, CLEARING, EATING, DEAD }
 	if state_val != null:
 		match int(state_val):
 			0: state_name = "idle"
@@ -158,8 +162,13 @@ func _format_current_action() -> String:
 			4: state_name = "deliver"
 			5: state_name = "clear"
 			6: state_name = "eat"
+			7: state_name = "dead"
 			_:
-				state_name = str(state_val)
+				# если добавят стейты — имя из enum keys
+				if ch.get("State") != null:
+					state_name = str(state_val)
+				else:
+					state_name = str(state_val)
 
 	var d = ch.get("data")
 	var item := ""
@@ -173,6 +182,15 @@ func _format_current_action() -> String:
 	var cargo := ""
 	if item != "" and amount > 0:
 		cargo = "%s%d" % [item, amount]
+
+	# Мёртв — сразу понятная строка (+ причина если есть)
+	if state_name == "dead":
+		var cause := ""
+		if d != null and "death_cause" in d and str(d.death_cause) != "":
+			cause = str(d.death_cause)
+		if cause != "":
+			return "dead (%s)" % cause
+		return "dead"
 
 	if state_name == "walk" and cargo != "":
 		return "carry: %s" % cargo
@@ -193,6 +211,30 @@ func _format_current_action() -> String:
 			return "idle (hold: %s)" % cargo
 		return "idle"
 	return state_name
+
+
+func _format_death_line(d) -> String:
+	if d == null:
+		return ""
+	var ch = _selected
+	var st = ch.get("current_state") if ch else null
+	var is_dead := st != null and int(st) == 7
+	if not is_dead and "health" in d and float(d.health) > 0.0:
+		return ""
+	var cause := str(d.death_cause) if "death_cause" in d else ""
+	if cause == "":
+		# эвристика по текущим статам
+		var hunger := float(d.hunger) if "hunger" in d else 0.0
+		var energy := float(d.energy) if "energy" in d else 100.0
+		if hunger >= 90.0 and energy <= 10.0:
+			cause = "starvation+exhaustion"
+		elif hunger >= 90.0:
+			cause = "starvation"
+		elif energy <= 10.0:
+			cause = "exhaustion"
+		else:
+			cause = "unknown"
+	return "cause: %s" % cause
 
 func _format_speeds_line() -> String:
 	var ch = _selected

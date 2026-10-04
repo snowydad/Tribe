@@ -3,6 +3,86 @@
 [ext_resource type="Script" uid="uid://ugf2rtbs5ikb" path="res://src/environment/berries.gd" id="1_cyyvj"]
 [ext_resource type="PackedScene" uid="uid://u72by4xtv28g" path="res://assets/models/environment/berries.glb" id="2_jpmde"]
 
+[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_jpmde"]
+animation = &"Wind-0"
+
+[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_cyyvj"]
+animation = &"Wind-100"
+
+[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_ew0m4"]
+animation = &"Wind-20"
+
+[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_n6k8m"]
+animation = &"Wind-40"
+
+[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_mbq4u"]
+animation = &"Wind-60"
+
+[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_bi6cs"]
+animation = &"Wind-80"
+
+[sub_resource type="AnimationNodeStateMachineTransition" id="AnimationNodeStateMachineTransition_454ov"]
+advance_mode = 2
+
+[sub_resource type="AnimationNodeStateMachineTransition" id="AnimationNodeStateMachineTransition_452la"]
+xfade_time = 1.0
+advance_mode = 2
+advance_expression = "current_berries > 4"
+
+[sub_resource type="AnimationNodeStateMachineTransition" id="AnimationNodeStateMachineTransition_bitdt"]
+xfade_time = 0.5
+advance_mode = 2
+advance_expression = "current_berries==4
+
+
+"
+
+[sub_resource type="AnimationNodeStateMachineTransition" id="AnimationNodeStateMachineTransition_kqwoa"]
+advance_mode = 2
+advance_expression = "current_berries==3
+"
+
+[sub_resource type="AnimationNodeStateMachineTransition" id="AnimationNodeStateMachineTransition_emue0"]
+advance_mode = 2
+advance_expression = "current_berries==2
+"
+
+[sub_resource type="AnimationNodeStateMachineTransition" id="AnimationNodeStateMachineTransition_8e3mi"]
+advance_mode = 2
+advance_expression = "current_berries==1
+"
+
+[sub_resource type="AnimationNodeStateMachineTransition" id="AnimationNodeStateMachineTransition_cyyvj"]
+xfade_time = 0.5
+break_loop_at_end = true
+advance_mode = 0
+advance_expression = "current_berries < 5
+"
+
+[sub_resource type="AnimationNodeStateMachineTransition" id="AnimationNodeStateMachineTransition_jpmde"]
+xfade_time = 0.5
+break_loop_at_end = true
+advance_mode = 2
+advance_expression = "current_berries < 1"
+
+[sub_resource type="AnimationNodeStateMachine" id="AnimationNodeStateMachine_k2qrw"]
+allow_transition_to_self = true
+states/Start/position = Vector2(82, 110)
+states/Wind-0/node = SubResource("AnimationNodeAnimation_jpmde")
+states/Wind-0/position = Vector2(223, 110)
+states/Wind-100/node = SubResource("AnimationNodeAnimation_cyyvj")
+states/Wind-100/position = Vector2(114, 206)
+states/Wind-20/node = SubResource("AnimationNodeAnimation_ew0m4")
+states/Wind-20/position = Vector2(762, 206)
+states/Wind-40/node = SubResource("AnimationNodeAnimation_n6k8m")
+states/Wind-40/position = Vector2(594, 305)
+states/Wind-60/node = SubResource("AnimationNodeAnimation_mbq4u")
+states/Wind-60/position = Vector2(439, 305)
+states/Wind-80/node = SubResource("AnimationNodeAnimation_bi6cs")
+states/Wind-80/position = Vector2(288, 305)
+transitions = ["Start", "Wind-0", SubResource("AnimationNodeStateMachineTransition_454ov"), "Wind-0", "Wind-100", SubResource("AnimationNodeStateMachineTransition_452la"), "Wind-100", "Wind-80", SubResource("AnimationNodeStateMachineTransition_bitdt"), "Wind-80", "Wind-60", SubResource("AnimationNodeStateMachineTransition_kqwoa"), "Wind-60", "Wind-40", SubResource("AnimationNodeStateMachineTransition_emue0"), "Wind-40", "Wind-20", SubResource("AnimationNodeStateMachineTransition_8e3mi"), "Wind-100", "Wind-20", SubResource("AnimationNodeStateMachineTransition_cyyvj"), "Wind-20", "Wind-0", SubResource("AnimationNodeStateMachineTransition_jpmde")]
+graph_offset = Vector2(-81, 14)
+
 [sub_resource type="FastNoiseLite" id="FastNoiseLite_slemt"]
 noise_type = 0
 fractal_type = 2
@@ -49,8 +129,10 @@ transform = Transform3D(0.70027876, -1.9557774e-08, -0.71386915, 7.916242e-09, -
 [node name="Berry_b_002" parent="berries/Armature/Skeleton3D" parent_id_path=PackedInt32Array(359153156, 959699049) index="8" unique_id=1994120919]
 transform = Transform3D(0.01921882, -6.984919e-08, 0.99981517, -3.3614924e-08, -0.9999998, -6.984919e-08, 0.9998151, -3.2074553e-08, -0.019218821, 0.13847834, 0.7879397, 0.43678552)
 
-[node name="AnimationPlayer" parent="berries" index="1" unique_id=616608810]
-autoplay = &"Wind-100"
+[node name="AnimationTree" type="AnimationTree" parent="berries" unique_id=705346421]
+tree_root = SubResource("AnimationNodeStateMachine_k2qrw")
+advance_expression_base_node = NodePath("../..")
+anim_player = NodePath("../AnimationPlayer")
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="." unique_id=1112722748]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5126747, 0)

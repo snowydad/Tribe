@@ -1,6 +1,6 @@
 # ==============================================================================
 # ФАЙЛ: src/characters/Character.gd
-# ОБНОВЛЕНО: 2026-10-04 13:59 CEST — de-berry: target_harvest / start_harvesting
+# ОБНОВЛЕНО: 2026-10-04 17:05 CEST — death_cause + UI dead
 # НАЗНАЧЕНИЕ: Контроллер персонажа с зафиксированным инпутом, считыванием .ini
 #            (move_speed, work_speed), поддержкой RVO2 Avoidance для обхода
 #            NavigationObstacle3D, спуском по дуге при Context Drop,
@@ -285,7 +285,22 @@ func _die() -> void:
 	velocity = Vector3.ZERO
 	_death_anim_played = false
 	current_state = State.DEAD
-	print("[Character] %s died (health=0)" % (data.character_name if data else "?"))
+	# если CharacterData ещё не проставил причину
+	if data and str(data.death_cause) == "":
+		if data.hunger > 90.0 and data.energy < 10.0:
+			data.death_cause = "starvation+exhaustion"
+		elif data.hunger > 90.0:
+			data.death_cause = "starvation"
+		elif data.energy < 10.0:
+			data.death_cause = "exhaustion"
+		else:
+			data.death_cause = "needs"
+	print("[Character] %s died (%s) hp=0 hunger=%.0f energy=%.0f" % [
+		data.character_name if data else "?",
+		data.death_cause if data else "?",
+		data.hunger if data else 0.0,
+		data.energy if data else 0.0,
+	])
 
 func _find_animation_player(node: Node) -> AnimationPlayer:
 	if not node:
@@ -536,19 +551,13 @@ func _process_eating(delta: float) -> void:
 		current_state = State.IDLE
 
 
-## Nutrition по carried item (не привязка к кусту ягод)
+## Nutrition из items.ini — новые продукты не правят character
 func _nutrition_for_carried() -> float:
-	# Позже: таблица items.ini. Пока — разумные дефолты по типу груза.
-	var item := str(data.carried_item).strip_edges().to_lower() if data else ""
-	match item:
-		"berry", "berries":
-			return 25.0
-		"banana", "bananas":
-			return 30.0
-		"mushroom", "fish", "fruit", "food":
-			return 25.0
-		_:
-			return 25.0
+	var item := str(data.carried_item) if data else ""
+	if ConfigLoader and ConfigLoader.has_method("get_item_nutrition"):
+		return float(ConfigLoader.get_item_nutrition(item, 25.0))
+	return 25.0
+
 
 func _process_delivering_unload(delta: float) -> void:
 	if not target_storage or not is_instance_valid(target_storage):
