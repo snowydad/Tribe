@@ -1,6 +1,7 @@
 [gd_scene format=3 uid="uid://cdh370sbee1wm"]
 
 [ext_resource type="Script" uid="uid://jyrct3qoouub" path="res://src/characters/character.gd" id="1_5iv74"]
+[ext_resource type="Material" uid="uid://d10jepq2kf0id" path="res://assets/materials/test.tres" id="2_o43y5"]
 [ext_resource type="Script" uid="uid://c4b7m4fkvcvru" path="res://src/characters/Components/TaskManager.gd" id="2_rxhcr"]
 
 [sub_resource type="BoxMesh" id="BoxMesh_j07er"]
@@ -120,11 +121,13 @@ collision_mask = 5
 script = ExtResource("1_5iv74")
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="." unique_id=1434398887]
-transform = Transform3D(0.9999999, 0, 0, 0, 0.9999996, 0, 0, 0, 0.9999997, 0, -0.5755106, 0.40396434)
+transform = Transform3D(0.9999999, 0, 0, 0, 0.9999996, 0, 0, 0, 0.9999997, 0, 0, 0)
+material_override = ExtResource("2_o43y5")
 mesh = SubResource("BoxMesh_j07er")
 
 [node name="Face" type="MeshInstance3D" parent="MeshInstance3D" unique_id=1902912857]
 transform = Transform3D(1.0000001, 0, 0, 0, 1.0000001, 0, 0, 0, 1, 0, 0.56193763, -0.24765149)
+material_override = ExtResource("2_o43y5")
 mesh = SubResource("SphereMesh_j07er")
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=1401391871]

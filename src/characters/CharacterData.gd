@@ -1,4 +1,5 @@
 # ==============================================================================
+# ОБНОВЛЕНО: 2026-10-04 23:29 CEST — energy_drain_hunger_threshold from ini
 # НАЗНАЧЕНИЕ: Ресурс хранения персональных данных, физических статов,
 #             врождённых талантов, приобретаемых навыков и инвентаря.
 # ==============================================================================
@@ -146,7 +147,7 @@ func add_skill_exp(skill_name: String, exp_amount: float) -> void:
 # ------------------------------------------------------------------------------
 # hunger += hunger_rate  (всегда)
 # energy += energy_work_rate | energy_rest_rate   (знак уже в ini)
-# energy += energy_drain_rate  если hunger > 50   (обычно отрицательный)
+# energy += energy_drain_rate  если hunger > energy_drain_hunger_threshold
 # health += health_drain_rate  если energy < thr ИЛИ hunger > thr  (один раз)
 # energy → move/work mult: get_energy_speed_mult()
 # ------------------------------------------------------------------------------
@@ -170,6 +171,7 @@ func update_needs(delta: float, activity: String = "rest") -> void:
 	var energy_work_rate: float = _cfg("energy_work_rate", -0.08)
 	var energy_rest_rate: float = _cfg("energy_rest_rate", 0.04)
 	var energy_drain_rate: float = _cfg("energy_drain_rate", -0.03)
+	var energy_drain_hunger_thr: float = _cfg("energy_drain_hunger_threshold", 50.0)
 	var health_drain_rate: float = _cfg("health_drain_rate", -0.5)
 	var thr_energy: float = _cfg("health_energy_threshold", 10.0)
 	var thr_hunger: float = _cfg("health_hunger_threshold", 90.0)
@@ -183,8 +185,8 @@ func update_needs(delta: float, activity: String = "rest") -> void:
 	else:
 		energy = clampf(energy + energy_rest_rate * delta, 0.0, 100.0)
 
-	# 2b) доп. при hunger > 50
-	if hunger > 50.0:
+	# 2b) доп. drain при hunger > energy_drain_hunger_threshold (ini)
+	if hunger > energy_drain_hunger_thr:
 		energy = clampf(energy + energy_drain_rate * delta, 0.0, 100.0)
 
 	# 3) health: один drain, если хотя бы одно условие
