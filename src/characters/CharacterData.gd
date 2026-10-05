@@ -1,5 +1,5 @@
 # ==============================================================================
-# ОБНОВЛЕНО: 2026-10-04 23:29 CEST — energy_drain_hunger_threshold from ini
+# ОБНОВЛЕНО: 2026-10-05 12:05 CEST — hungry: no rest regen, only drain
 # НАЗНАЧЕНИЕ: Ресурс хранения персональных данных, физических статов,
 #             врождённых талантов, приобретаемых навыков и инвентаря.
 # ==============================================================================
@@ -146,8 +146,8 @@ func add_skill_exp(skill_name: String, exp_amount: float) -> void:
 # ОБРАБОТКА ВРЕМЕНИ И НУЖД
 # ------------------------------------------------------------------------------
 # hunger += hunger_rate  (всегда)
-# energy += energy_work_rate | energy_rest_rate   (знак уже в ini)
-# energy += energy_drain_rate  если hunger > energy_drain_hunger_threshold
+# energy += work_rate | rest_rate (rest только если hunger <= thr)
+# energy += energy_drain_rate  если hunger > thr  (rest не перекрывает)
 # health += health_drain_rate  если energy < thr ИЛИ hunger > thr  (один раз)
 # energy → move/work mult: get_energy_speed_mult()
 # ------------------------------------------------------------------------------
@@ -179,13 +179,14 @@ func update_needs(delta: float, activity: String = "rest") -> void:
 	# 1) голод
 	hunger = clampf(hunger + hunger_rate * delta, 0.0, 100.0)
 
-	# 2) energy: work / rest (знак из ini)
+	# 2) energy: work / rest
+	# При hunger > threshold rest-реген НЕ идёт (иначе +rest сильнее drain → energy=100).
 	if activity == "work":
 		energy = clampf(energy + energy_work_rate * delta, 0.0, 100.0)
-	else:
+	elif hunger <= energy_drain_hunger_thr:
 		energy = clampf(energy + energy_rest_rate * delta, 0.0, 100.0)
 
-	# 2b) доп. drain при hunger > energy_drain_hunger_threshold (ini)
+	# 2b) drain при голоде (и idle, и work)
 	if hunger > energy_drain_hunger_thr:
 		energy = clampf(energy + energy_drain_rate * delta, 0.0, 100.0)
 
