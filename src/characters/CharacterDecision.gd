@@ -1,7 +1,6 @@
 # ==============================================================================
-# ОБНОВЛЕНО: 2026-10-06 17:30 — world storage без StorageSite static (has_space/has_food на site)
+# ОБНОВЛЕНО: 2026-10-06 18:20 — harvest naming; no berries object in char
 # ФАЙЛ: src/characters/CharacterDecision.gd
-# ОБНОВЛЕНО: 2026-10-06 — edible без hardcode berry
 # ОБНОВЛЕНО: 2026-10-04 15:11 CEST — edible via items.ini
 # НАЗНАЧЕНИЕ: Решения что делать (есть / сдать / собирать / ждать).
 #            Не двигает персонажа сам — зовёт host.start_* / host.move_*.
@@ -46,7 +45,7 @@ func has_edible_cargo() -> bool:
 		return false
 	var d = _data()
 	var item := str(d.carried_item)
-	# edible только items.ini / ConfigLoader — не hardcode berry
+	# edible: только items.ini / ConfigLoader
 	if ConfigLoader and ConfigLoader.has_method("is_item_edible"):
 		return bool(ConfigLoader.is_item_edible(item, false))
 	if ConfigLoader and ConfigLoader.has_method("get_item_nutrition"):
@@ -161,7 +160,7 @@ func should_deliver() -> bool:
 
 
 ## C: руки пусты + hunger > 25 + на складе еда.
-## Если склад full — приоритет выше куста (разгрузка через жор со склада).
+## Если deposit full — приоритет eat storage, не harvest.
 func should_eat_from_storage() -> bool:
 	if hands_busy() or not _data():
 		return false
@@ -170,17 +169,17 @@ func should_eat_from_storage() -> bool:
 	return storage_has_food()
 
 
-## D: руки пусты + hunger > 25 + склад пуст (0 еды) + знает harvest-site.
-## Full склад с едой → НЕ на куст (только eat storage).
-func should_go_forage() -> bool:
+## D: руки пусты + hunger > 25 + нет еды на deposit + знает harvest-site.
+## Full deposit + food → eat storage, not harvest site.
+func should_go_harvest() -> bool:
 	if hands_busy() or not _data():
 		return false
 	if _data().hunger <= 25.0:
 		return false
-	# есть еда на складе (в т.ч. full) — жрём со склада, не с куста
+	# есть еда на deposit (в т.ч. full) — eat storage, не harvest
 	if storage_has_food():
 		return false
-	# full без еды — странно, но на куст тоже не рвёмся пока full
+	# full без еды — harvest тоже не начинаем пока full
 	if storage_is_full():
 		return false
 	return knows_harvest()
@@ -382,7 +381,7 @@ func resolve_after_drop(drop_site: Node3D = null) -> void:
 	if knows_harvest() and site_has_work(host.target_harvest):
 		host.start_work_at(host.target_harvest)
 		return
-	if should_go_forage() and knows_harvest():
+	if should_go_harvest() and knows_harvest():
 		host.start_work_at(host.target_harvest)
 		return
 
@@ -392,7 +391,7 @@ func resolve_after_drop(drop_site: Node3D = null) -> void:
 		host.current_state = host.State.IDLE
 
 
-# --- IDLE: матрица + TaskManager + poll куста ---
+# --- IDLE: матрица + TaskManager + poll harvest ---
 
 func process_idle(delta: float) -> void:
 	tick_cargo_drop(delta)
@@ -423,7 +422,7 @@ func process_idle(delta: float) -> void:
 		go_eat_from_storage()
 		return
 
-	if should_go_forage():
+	if should_go_harvest():
 		if WorkSite.can_accept(host.target_harvest, host):
 			host.start_work_at(host.target_harvest)
 			return
@@ -437,13 +436,13 @@ func process_idle(delta: float) -> void:
 				TaskManager.TaskType.GATHER:
 					if cur_task.target_node and is_instance_valid(cur_task.target_node):
 						host.target_harvest = cur_task.target_node
-						# Full: не ходим на куст. hunger>25 → жрём со склада.
+						# Full: не harvest; hunger>25 → eat storage.
 						if storage_is_full():
 							if d and d.hunger > 25.0 and storage_has_food():
 								go_eat_from_storage()
 							return
 						if d and d.hunger > 25.0 and storage_has_food():
-							# голодны и есть еда на складе — сначала склад, не куст
+							# hunger + food in storage → storage first, not harvest
 							go_eat_from_storage()
 							return
 						if WorkSite.can_accept(cur_task.target_node, host):
@@ -478,7 +477,7 @@ func process_idle(delta: float) -> void:
 						host.move_to_position(cur_task.target_pos)
 					return
 
-	# Poll: куст созрел / full → склад
+	# Poll: harvest ready / full → storage
 	if knows_harvest() or storage_is_full():
 		_idle_check_timer += delta
 		if _idle_check_timer >= 0.5:
@@ -491,7 +490,7 @@ func process_idle(delta: float) -> void:
 				return
 			if not knows_harvest():
 				return
-			# куст только если склад НЕ full и нет еды / есть место под сдачу
+			# harvest только если deposit не full и нет еды / есть место под сдачу
 			if d and d.hunger > 25.0 and not storage_has_food():
 				if WorkSite.can_accept(host.target_harvest, host):
 					host.start_work_at(host.target_harvest)

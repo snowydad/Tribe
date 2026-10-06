@@ -1,6 +1,6 @@
 # ==============================================================================
 # ФАЙЛ: src/characters/Character.gd
-# ОБНОВЛЕНО: 2026-10-06 — StorageSite.find_nearest (как в git); deposit via WorkSite
+# ОБНОВЛЕНО: 2026-10-06 18:20 — harvest WorkSite only; no berries object
 # НАЗНАЧЕНИЕ: Контроллер персонажа с зафиксированным инпутом, считыванием .ini
 #            (move_speed, work_speed), поддержкой RVO2 Avoidance для обхода
 #            NavigationObstacle3D, спуском по дуге при Context Drop,
@@ -38,7 +38,7 @@ var current_state: State = State.IDLE
 var is_selected: bool = false
 var is_being_dragged: bool = false
 
-var target_harvest: Node3D = null  # WorkSite category harvest (не berries-специфика)
+var target_harvest: Node3D = null  # любой WorkSite category harvest
 var target_storage: Node3D = null
 var target_obstacle: Node3D = null
 
@@ -574,7 +574,7 @@ func _nutrition_for_carried() -> float:
 
 
 func _process_delivering_unload(delta: float) -> void:
-	# Как gathering: только WorkSite API. deposit_food — внутри storage.do_work
+	# deposit: только WorkSite API (do_work на site)
 	if not target_storage or not is_instance_valid(target_storage):
 		_is_unloading_at_storage = false
 		current_state = State.IDLE

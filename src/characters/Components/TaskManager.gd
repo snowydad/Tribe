@@ -12,7 +12,7 @@ enum TaskType {
 	NONE,          # Нет задачи
 	MOVE_TO,       # Обычное перемещение в точку на земле
 	WAIT_IDLE,     # Пауза/ожидание на месте
-	GATHER,        # Сбор ягод/ресурсов с куста
+	GATHER,        # Сбор ресурсов (harvest WorkSite)
 	DELIVER,       # Доставка и разгрузка ресурса на склад
 	EAT,           # Поедание имеющейся еды (из рук или со склада)
 	CLEAR,         # Расчистка завала/сухостоя
@@ -27,7 +27,7 @@ class Task:
 	var priority: int = 0             # Чем выше число, тем раньше выполняется
 	var wait_timer: float = 0.0       # Длительность таймера ожидания
 	var is_user_command: bool = false # Вызвана ли задача прямым действием игрока (Drag & Drop)
-	var is_persistent: bool = false   # Фоновая бессрочная задача (например, цикл работы у куста)
+	var is_persistent: bool = false   # Фоновая бессрочная задача (например, цикл harvest WorkSite)
 
 	func _init(p_type: TaskType = TaskType.NONE, p_pos: Vector3 = Vector3.ZERO, p_node: Node3D = null, p_priority: int = 0, p_persistent: bool = false) -> void:
 		type = p_type
