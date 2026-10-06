@@ -1,6 +1,6 @@
 # ==============================================================================
 # ФАЙЛ: src/characters/Character.gd
-# ОБНОВЛЕНО: 2026-10-06 22:15 — drop: cargo → deliver; harvest blocked while cargo
+# ОБНОВЛЕНО: 2026-10-06 23:30 — not-ready site → wander–check loop (не idle)
 # НАЗНАЧЕНИЕ: Контроллер персонажа с зафиксированным инпутом, считыванием .ini
 #            (move_speed, work_speed), поддержкой RVO2 Avoidance для обхода
 #            NavigationObstacle3D, спуском по дуге при Context Drop,
@@ -438,7 +438,7 @@ func _on_movement_finished() -> void:
 			if WorkSite.can_accept(target_harvest, self):
 				start_harvesting(target_harvest)
 				return
-			current_state = State.IDLE
+			wander_nearby(10.0, 15.0)
 			return
 
 		if decision.hands_busy():
@@ -505,9 +505,8 @@ func _process_gathering(delta: float) -> void:
 
 	# Готовность — у объекта (WorkSite)
 	if not WorkSite.can_accept(target_harvest, self):
-		current_state = State.IDLE
-		decision._idle_check_timer = 0.0  # ждать полсекунды (idle poll)
-		# target_harvest помним — idle/GATHER возобновит, когда can_accept
+		# не готов → wander, после прихода process_idle снова проверит
+		wander_nearby(10.0, 15.0)
 		return
 
 	var required_time: float = WorkSite.get_time(target_harvest, default_gather_time)
@@ -616,11 +615,13 @@ func _process_delivering_unload(delta: float) -> void:
 			task_manager.complete_current_task()
 		if target_storage.has_method("release_work_point"):
 			target_storage.release_work_point(self)
-		# назад на harvest если есть
+		# harvest готов → work; иначе wander-wait
 		if data and data.item_amount <= 0 and target_harvest and is_instance_valid(target_harvest):
 			if WorkSite.can_accept(target_harvest, self):
-				start_work_at(target_harvest)
-				return
+				start_harvesting(target_harvest)
+			else:
+				wander_nearby(10.0, 15.0)
+			return
 		current_state = State.IDLE
 
 func _process_clearing(delta: float) -> void:
@@ -810,8 +811,12 @@ func start_harvesting(site: Node3D) -> void:
 		task_manager.set_user_override_task(TaskManager.Task.new(TaskManager.TaskType.GATHER, Vector3.ZERO, site, 10, true))
 
 	var site_ready := WorkSite.can_accept(site, self)
+	if not site_ready:
+		# site в памяти/очереди, но не готов — гуляем
+		wander_nearby(10.0, 15.0)
+		return
 	if _at_work_point(site) and is_on_floor():
-		current_state = State.GATHERING if site_ready else State.IDLE
+		current_state = State.GATHERING
 	else:
 		current_state = State.MOVING
 		if nav_agent:

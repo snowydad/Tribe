@@ -40,6 +40,19 @@ func knows_harvest() -> bool:
 	return host.target_harvest != null and is_instance_valid(host.target_harvest)
 
 
+## Готов → harvest; не готов → wander (loop: погулял → idle → снова check)
+func try_work_or_wander_harvest(site: Node3D = null) -> bool:
+	var s: Node3D = site if site else (host.target_harvest if host else null)
+	if s == null or not is_instance_valid(s):
+		return false
+	if WorkSite.can_accept(s, host):
+		host.start_harvesting(s)
+		return true
+	host.wander_nearby(10.0, 15.0)
+	return true
+
+
+
 func has_edible_cargo() -> bool:
 	if not hands_busy():
 		return false
@@ -400,7 +413,7 @@ func resolve_after_drop(drop_site: Node3D = null) -> void:
 			match cur.type:
 				TaskManager.TaskType.GATHER:
 					if cur.target_node and is_instance_valid(cur.target_node):
-						host.start_harvesting(cur.target_node)
+						try_work_or_wander_harvest(cur.target_node)
 						return
 				TaskManager.TaskType.DELIVER:
 					# без груза deliver бессмысленен
@@ -478,9 +491,8 @@ func process_idle(delta: float) -> void:
 		return
 
 	if should_go_harvest():
-		if WorkSite.can_accept(host.target_harvest, host):
-			host.start_work_at(host.target_harvest)
-			return
+		try_work_or_wander_harvest(host.target_harvest)
+		return
 
 	var tm = _tm()
 	var d = _data()
@@ -491,17 +503,14 @@ func process_idle(delta: float) -> void:
 				TaskManager.TaskType.GATHER:
 					if cur_task.target_node and is_instance_valid(cur_task.target_node):
 						host.target_harvest = cur_task.target_node
-						# Full: не harvest; hunger>25 → eat storage.
 						if storage_is_full():
 							if d and d.hunger > 25.0 and storage_has_food():
 								go_eat_from_storage()
-							return
+								return
 						if d and d.hunger > 25.0 and storage_has_food():
-							# hunger + food in storage → storage first, not harvest
 							go_eat_from_storage()
 							return
-						if WorkSite.can_accept(cur_task.target_node, host):
-							host.start_harvesting(cur_task.target_node)
+						try_work_or_wander_harvest(cur_task.target_node)
 						return
 				TaskManager.TaskType.DELIVER:
 					if cur_task.target_node and is_instance_valid(cur_task.target_node):
@@ -545,12 +554,6 @@ func process_idle(delta: float) -> void:
 				return
 			if not knows_harvest():
 				return
-			# harvest только если deposit не full и нет еды / есть место под сдачу
-			if d and d.hunger > 25.0 and not storage_has_food():
-				if WorkSite.can_accept(host.target_harvest, host):
-					host.start_work_at(host.target_harvest)
-				return
-			if d and d.hunger <= 25.0 and storage_has_space():
-				if WorkSite.can_accept(host.target_harvest, host):
-					print("[Character] %s: work site ready, resuming..." % d.character_name)
-					host.start_work_at(host.target_harvest)
+			# site не готов → wander; готов → work
+			try_work_or_wander_harvest(host.target_harvest)
+			return
