@@ -1,5 +1,5 @@
 # ==============================================================================
-# ОБНОВЛЕНО: 2026-10-06 18:20 — harvest naming; no berries object in char
+# ОБНОВЛЕНО: 2026-10-06 22:15 — drop v2: cargo → deliver first (не gather)
 # ФАЙЛ: src/characters/CharacterDecision.gd
 # ОБНОВЛЕНО: 2026-10-04 15:11 CEST — edible via items.ini
 # НАЗНАЧЕНИЕ: Решения что делать (есть / сдать / собирать / ждать).
@@ -284,6 +284,49 @@ func handle_full_storage_with_cargo() -> bool:
 
 # --- DROP: после think — одно решение ---
 
+func remembers_site(site: Node3D) -> bool:
+	if not site or not is_instance_valid(site) or not host:
+		return false
+	if host.target_harvest != null and is_instance_valid(host.target_harvest) and host.target_harvest == site:
+		return true
+	if host.target_storage != null and is_instance_valid(host.target_storage) and host.target_storage == site:
+		return true
+	return false
+
+
+func remember_site(site: Node3D) -> void:
+	if not site or not is_instance_valid(site) or not host:
+		return
+	var cat := WorkSite.get_category(site)
+	if cat == "deposit":
+		host.target_storage = site
+	else:
+		# harvest / other
+		host.target_harvest = site
+	print("[Decision] remember site %s (%s)" % [site.name, cat])
+
+
+## eat* после drop: с рук, если hunger > порог (ini / 25)
+func drop_eat_if_hungry() -> bool:
+	var d = _data()
+	if not d:
+		return false
+	var thr: float = 25.0
+	if ConfigLoader:
+		if ConfigLoader.has_method("get_character_value"):
+			thr = float(ConfigLoader.get_character_value("base_stats", "drop_eat_hunger", thr))
+		elif ConfigLoader.has_method("get_config_value"):
+			thr = float(ConfigLoader.get_config_value("character", "base_stats", "drop_eat_hunger", thr))
+	if d.hunger <= thr:
+		return false
+	if not has_edible_cargo():
+		return false
+	start_eat_hands()
+	return true
+
+
+
+
 func site_has_work(site: Node3D) -> bool:
 	if not site or not is_instance_valid(site):
 		return false
@@ -323,41 +366,47 @@ func has_talent_for_site(site: Node3D) -> bool:
 
 
 func resolve_after_drop(drop_site: Node3D = null) -> void:
-	var d = _data()
+	# Drop v2 после think:
+	# 0) есть cargo → сдать (склад), НЕ идти собирать
+	# 1) task queue → work @ task (GATHER только без cargo)
+	# 2) object: talent/memory/wander
+	# 3) blank: wander
 	var tm = _tm()
 
-	if should_eat_from_hands():
-		start_eat_hands()
-		return
-
+	# --- 0) груз в руках: продолжить доставку ---
 	if hands_busy():
+		# drop прямо на deposit → сдать сюда
 		if drop_site and is_instance_valid(drop_site) and WorkSite.get_category(drop_site) == "deposit":
-			if storage_has_space(drop_site):
-				host.start_delivering_to_storage(drop_site)
-				return
-			handle_full_storage_with_cargo()
+			host.start_delivering_to_storage(drop_site)
 			return
-		resolve_cargo_action()
+		# DELIVER в очереди
+		if tm and tm.has_tasks():
+			var cur = tm.get_current_task()
+			if cur and cur.type == TaskManager.TaskType.DELIVER and cur.target_node and is_instance_valid(cur.target_node):
+				host.start_delivering_to_storage(cur.target_node)
+				return
+		# память склада
+		if host.target_storage and is_instance_valid(host.target_storage):
+			host.start_delivering_to_storage(host.target_storage)
+			return
+		# любой ближайший склад
+		host._go_to_nearest_storage()
 		return
 
-	if should_eat_from_storage():
-		go_eat_from_storage()
-		return
-
+	# --- 1) задача в очереди (рук пусты) ---
 	if tm and tm.has_tasks():
 		var cur = tm.get_current_task()
 		if cur:
 			match cur.type:
 				TaskManager.TaskType.GATHER:
-					if cur.target_node and is_instance_valid(cur.target_node) and site_has_work(cur.target_node):
+					if cur.target_node and is_instance_valid(cur.target_node):
 						host.start_harvesting(cur.target_node)
 						return
 				TaskManager.TaskType.DELIVER:
-					if hands_busy() and cur.target_node and is_instance_valid(cur.target_node) and storage_has_space(cur.target_node):
-						host.start_delivering_to_storage(cur.target_node)
-						return
+					# без груза deliver бессмысленен
+					tm.complete_current_task()
 				TaskManager.TaskType.CLEAR:
-					if cur.target_node and is_instance_valid(cur.target_node) and site_has_work(cur.target_node):
+					if cur.target_node and is_instance_valid(cur.target_node):
 						host.start_clearing_obstacle(cur.target_node)
 						return
 				TaskManager.TaskType.EAT:
@@ -365,30 +414,36 @@ func resolve_after_drop(drop_site: Node3D = null) -> void:
 						host.start_eating()
 						return
 					tm.complete_current_task()
+				TaskManager.TaskType.MOVE_TO:
+					host.move_to_position(cur.target_pos)
+					drop_eat_if_hungry()
+					return
+				TaskManager.TaskType.BUILD:
+					if cur.target_node and is_instance_valid(cur.target_node):
+						host.go_work(cur.target_node)
+						return
 				_:
-					pass
+					if cur.target_node and is_instance_valid(cur.target_node):
+						host.go_work(cur.target_node)
+						return
 
+	# --- 2) drop на object ---
 	if drop_site and is_instance_valid(drop_site):
-		if site_has_work(drop_site) and has_talent_for_site(drop_site):
+		if has_talent_for_site(drop_site):
 			host.start_work_at(drop_site)
 			return
-		if site_has_work(drop_site) and not has_talent_for_site(drop_site):
-			host.wander_nearby()
+		if remembers_site(drop_site):
+			host.start_work_at(drop_site)
 			return
-		host.current_state = host.State.IDLE
+		remember_site(drop_site)
+		host.wander_nearby(10.0, 15.0)
+		drop_eat_if_hungry()
 		return
 
-	if knows_harvest() and site_has_work(host.target_harvest):
-		host.start_work_at(host.target_harvest)
-		return
-	if should_go_harvest() and knows_harvest():
-		host.start_work_at(host.target_harvest)
-		return
+	# --- 3) blank ---
+	host.wander_nearby(10.0, 15.0)
+	drop_eat_if_hungry()
 
-	if d and d.hunger <= 25.0:
-		host.wander_nearby()
-	else:
-		host.current_state = host.State.IDLE
 
 
 # --- IDLE: матрица + TaskManager + poll harvest ---

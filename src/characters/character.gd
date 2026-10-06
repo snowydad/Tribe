@@ -1,6 +1,6 @@
 # ==============================================================================
 # ФАЙЛ: src/characters/Character.gd
-# ОБНОВЛЕНО: 2026-10-06 18:20 — harvest WorkSite only; no berries object
+# ОБНОВЛЕНО: 2026-10-06 22:15 — drop: cargo → deliver; harvest blocked while cargo
 # НАЗНАЧЕНИЕ: Контроллер персонажа с зафиксированным инпутом, считыванием .ini
 #            (move_speed, work_speed), поддержкой RVO2 Avoidance для обхода
 #            NavigationObstacle3D, спуском по дуге при Context Drop,
@@ -699,23 +699,34 @@ func move_to_position(target_pos: Vector3) -> void:
 		nav_agent.target_position = target_pos
 
 
-## Context Drop: site → go_work; пусто → soft_move. Игрок-команда, без matrix.
+## Context Drop v2: приземление → think 2–5s → resolve_after_drop (не сразу work).
 func on_context_drop(site: Node3D, land_pos: Vector3) -> void:
 	is_being_dragged = false
 	_is_unloading_at_storage = false
 	decision.want_storage_meal = false
 	_drop_think_left = -1.0
-	_awaiting_drop_decide = false
-	drop_site = null
 
-	if site and is_instance_valid(site) and (
+	var is_obj := site != null and is_instance_valid(site) and (
 		WorkSite.is_site(site) or site.has_method("do_work") or site.has_method("get_free_work_point")
-	):
-		go_work(site)
-		return
+	)
+	drop_site = site if is_obj else null
 
-	# пустое место
-	_soft_move_to(land_pos)
+	var dest: Vector3 = land_pos
+	if is_obj:
+		dest = _get_free_work_point_safe(site)
+
+	_awaiting_drop_decide = true
+	_current_target_pos = dest
+	# Уже на земле у точки — сразу think; иначе дойти/долететь
+	if is_on_floor():
+		var pos_xz := Vector2(global_position.x, global_position.z)
+		var dst_xz := Vector2(dest.x, dest.z)
+		if pos_xz.distance_to(dst_xz) <= maxf(arrival_distance, 0.5):
+			_begin_drop_think()
+			return
+	current_state = State.MOVING
+	if nav_agent:
+		nav_agent.target_position = dest
 
 
 ## Движение без set_user_override — очередь (persistent GATHER и т.д.) жива
@@ -730,7 +741,8 @@ func _soft_move_to(target_pos: Vector3) -> void:
 func _begin_drop_think() -> void:
 	current_state = State.IDLE
 	_awaiting_drop_decide = true
-	_drop_think_left = maxf(0.05, drop_think_time)
+	# v2: think 2–5 сек
+	_drop_think_left = randf_range(2.0, 5.0)
 	if data:
 		print("[Character] %s drop-think %.1fs (site=%s)" % [
 			data.character_name,
@@ -739,10 +751,14 @@ func _begin_drop_think() -> void:
 		])
 
 
-func wander_nearby() -> void:
+func wander_nearby(radius_min: float = -1.0, radius_max: float = -1.0) -> void:
 	_awaiting_drop_decide = false
 	_drop_think_left = -1.0
-	var r: float = randf_range(wander_radius_min, wander_radius_max)
+	var rmin: float = wander_radius_min if radius_min < 0.0 else radius_min
+	var rmax: float = wander_radius_max if radius_max < 0.0 else radius_max
+	if rmax < rmin:
+		rmax = rmin
+	var r: float = randf_range(rmin, rmax)
 	var a: float = randf() * TAU
 	var dest: Vector3 = global_position + Vector3(cos(a) * r, 0.0, sin(a) * r)
 	dest.y = global_position.y
@@ -774,6 +790,13 @@ func start_work_at(site: Node3D) -> void:
 
 
 func start_harvesting(site: Node3D) -> void:
+	# с грузом не собираем — сначала сдача
+	if data and data.item_amount > 0:
+		if target_storage and is_instance_valid(target_storage):
+			start_delivering_to_storage(target_storage)
+		else:
+			_go_to_nearest_storage()
+		return
 	_release_all_work_points()
 	is_being_dragged = false
 	_is_unloading_at_storage = false
