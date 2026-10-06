@@ -1,5 +1,6 @@
 # ==============================================================================
 # ФАЙЛ: src/characters/CharacterDecision.gd
+# ОБНОВЛЕНО: 2026-10-06 — edible без hardcode berry
 # ОБНОВЛЕНО: 2026-10-04 15:11 CEST — edible via items.ini
 # НАЗНАЧЕНИЕ: Решения что делать (есть / сдать / собирать / ждать).
 #            Не двигает персонажа сам — зовёт host.start_* / host.move_*.
@@ -44,10 +45,12 @@ func has_edible_cargo() -> bool:
 		return false
 	var d = _data()
 	var item := str(d.carried_item)
+	# edible только items.ini / ConfigLoader — не hardcode berry
 	if ConfigLoader and ConfigLoader.has_method("is_item_edible"):
 		return bool(ConfigLoader.is_item_edible(item, false))
-	var low := item.strip_edges().to_lower()
-	return low in ["berry", "berries", "banana", "bananas", "fruit", "food", "mushroom", "fish"] or low.is_empty()
+	if ConfigLoader and ConfigLoader.has_method("get_item_nutrition"):
+		return float(ConfigLoader.get_item_nutrition(item, 0.0)) > 0.0
+	return false
 
 
 

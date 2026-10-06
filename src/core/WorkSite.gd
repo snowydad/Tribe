@@ -74,8 +74,6 @@ static func get_category(node: Node) -> String:
 			return "build"
 		_:
 			# эвристики по старым API
-			if node and node.has_method("harvest_berry"):
-				return "harvest"
 			if node and (node.has_method("deposit_food") or node.is_in_group("storage")):
 				return "deposit"
 			if node and (node.has_method("clear_obstacle") or node.is_in_group("obstacle")):

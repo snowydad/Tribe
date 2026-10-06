@@ -1,8 +1,10 @@
 # ==============================================================================
+# ОБНОВЛЕНО: 2026-10-06 — class_name BerriesSite; berry-логика только здесь
 # berries.gd — куст ягод как WorkSite (данные из berries.ini)
 # ОБНОВЛЕНО: 2026-10-04 21:22 CEST — life_cycles_max: после N полных сборов куст отмирает
 # ==============================================================================
 extends Node3D
+class_name BerriesSite
 
 @export_group("Crop Settings")
 @export var max_berries: int = 5

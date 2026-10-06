@@ -7,7 +7,7 @@
 [ext_resource type="Script" uid="uid://d28827n4sjcwa" path="res://src/main/camera_3d.gd" id="3_djufw"]
 [ext_resource type="Material" uid="uid://ci6tdoqvoe6o0" path="res://assets/materials/M_CameraTarget.tres" id="5_jqarl"]
 [ext_resource type="Material" uid="uid://ck5o04nlff80n" path="res://assets/models/M_Ground.tres" id="7_30cu5"]
-[ext_resource type="Shader" uid="uid://bu1tyg0c4a10" path="res://src/main/mist.gdshader" id="7_w0wra"]
+[ext_resource type="Material" uid="uid://d10jepq2kf0id" path="res://assets/materials/test.tres" id="7_w0wra"]
 [ext_resource type="PackedScene" uid="uid://24t67vidpa66" path="res://src/environment/storage.tscn" id="8_frqgp"]
 [ext_resource type="PackedScene" uid="uid://cxbpv8trxi8g7" path="res://src/environment/berries.tscn" id="9_2nke2"]
 [ext_resource type="PackedScene" uid="uid://dmn7620t3d78t" path="res://src/environment/dev_obstacle.tscn" id="10_km7bn"]
@@ -30,12 +30,6 @@ tonemap_mode = 2
 [sub_resource type="SphereMesh" id="SphereMesh_csncc"]
 radius = 0.25
 height = 0.5
-
-[sub_resource type="ShaderMaterial" id="ShaderMaterial_j07er"]
-render_priority = 0
-shader = ExtResource("7_w0wra")
-shader_parameter/blur_amount = 5.0
-shader_parameter/distortion = 0.10000000149012
 
 [sub_resource type="CylinderMesh" id="CylinderMesh_j07er"]
 top_radius = 8.0
@@ -99,7 +93,7 @@ size = Vector3(2, 2, 2)
 
 [node name="DevSphere" type="CSGSphere3D" parent="." unique_id=714643722]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.008948088, 2.3462727, 5.460557)
-material_override = SubResource("ShaderMaterial_j07er")
+material_override = ExtResource("7_w0wra")
 radius = 1.0
 
 [node name="Island" type="MeshInstance3D" parent="." unique_id=1500141399]
@@ -119,7 +113,7 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6.5726643, 1.2753301, 27.521
 transform = Transform3D(1, 2.4796464e-08, 0, 9.022187e-09, 1.0000001, 2.3283064e-09, 1.4901161e-08, 1.0244548e-08, 1.0000001, 4.39073, 1.3461447, 16.559986)
 
 [node name="DevObstacle" parent="." unique_id=1725071813 instance=ExtResource("10_km7bn")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.93157995, 1.259217, 5.9670477)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.6014705, 1.259217, 13.374958)
 
 [node name="UI" type="CanvasLayer" parent="." unique_id=1004832540]
 layer = 20

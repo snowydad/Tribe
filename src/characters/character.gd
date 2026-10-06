@@ -1,6 +1,6 @@
 # ==============================================================================
 # ФАЙЛ: src/characters/Character.gd
-# ОБНОВЛЕНО: 2026-10-06 — deposit через WorkSite.do_work; find storage → StorageSite
+# ОБНОВЛЕНО: 2026-10-06 — harvest generic WorkSite; berries только в berries.gd
 # НАЗНАЧЕНИЕ: Контроллер персонажа с зафиксированным инпутом, считыванием .ini
 #            (move_speed, work_speed), поддержкой RVO2 Avoidance для обхода
 #            NavigationObstacle3D, спуском по дуге при Context Drop,
@@ -38,7 +38,7 @@ var current_state: State = State.IDLE
 var is_selected: bool = false
 var is_being_dragged: bool = false
 
-var target_harvest: Node3D = null  # любой harvest WorkSite (ягоды, бананы, …)
+var target_harvest: Node3D = null  # WorkSite category harvest (не berries-специфика)
 var target_storage: Node3D = null
 var target_obstacle: Node3D = null
 
@@ -511,7 +511,7 @@ func _process_gathering(delta: float) -> void:
 		return
 
 	var required_time: float = WorkSite.get_time(target_harvest, default_gather_time)
-	var skill_key: String = WorkSite.get_skill(target_harvest, "forager")
+	var skill_key: String = WorkSite.get_skill(target_harvest, "worker")
 	var current_work_speed: float = work_speed
 	if data and data.has_method("get_effective_work_speed"):
 		current_work_speed = data.get_effective_work_speed(skill_key)
@@ -586,7 +586,7 @@ func _process_delivering_unload(delta: float) -> void:
 		return
 
 	var required_time: float = WorkSite.get_time(target_storage, default_deposit_time)
-	var skill_key: String = WorkSite.get_skill(target_storage, "trader")
+	var skill_key: String = WorkSite.get_skill(target_storage, "worker")
 	var current_work_speed: float = work_speed
 	if data and data.has_method("get_effective_work_speed"):
 		current_work_speed = data.get_effective_work_speed(skill_key)
@@ -773,11 +773,6 @@ func start_work_at(site: Node3D) -> void:
 			_go_to_site_wp(site)
 
 
-## @deprecated имя; используй start_harvesting
-func start_gathering_at_berries(site: Node3D) -> void:
-	start_harvesting(site)
-
-
 func start_harvesting(site: Node3D) -> void:
 	_release_all_work_points()
 	is_being_dragged = false
@@ -927,9 +922,11 @@ func _update_dev_ui() -> void:
 		state_str = "UNLOADING"
 	
 	var talent_str = data.talent.capitalize() if "talent" in data else "None"
-	var forager_lvl = 0
-	if "skills" in data and data.skills.has("forager"):
-		forager_lvl = data.skills["forager"].get("level", 0)
+	var skill_lvl = 0
+	if "skills" in data and target_harvest and is_instance_valid(target_harvest):
+		var sk = WorkSite.get_skill(target_harvest, "")
+		if sk != "" and data.skills.has(sk):
+			skill_lvl = data.skills[sk].get("level", 0)
 	
 	var site_hint := "-"
 	if target_harvest and is_instance_valid(target_harvest):
@@ -939,7 +936,7 @@ func _update_dev_ui() -> void:
 
 	var text_info = "%s (%s) [%s]%s\n" % [data.character_name, gender_str, state_str, " *SEL*" if is_selected else ""]
 	text_info += "Site: %s\n" % site_hint
-	text_info += "Talent: %s | Forager Lvl: %d\n" % [talent_str, forager_lvl]
+	text_info += "Talent: %s | Skill Lvl: %d\n" % [talent_str, skill_lvl]
 	text_info += "Age: %d yr | HP: %.0f | Hng: %.0f%%\n" % [data.age, data.health, data.hunger]
 	text_info += "Carrying: %s (%d) | Spd: %.1f | WSpd: %.1f\n" % [
 		data.carried_item if data.carried_item != "" else "None",
