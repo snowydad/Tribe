@@ -1,6 +1,6 @@
 # ==============================================================================
 # ФАЙЛ: src/characters/Character.gd
-# ОБНОВЛЕНО: 2026-10-05 — go_work: click/drop site → WP → can_accept/do_work (единый контракт)
+# ОБНОВЛЕНО: 2026-10-06 — deposit через WorkSite.do_work; find storage → StorageSite
 # НАЗНАЧЕНИЕ: Контроллер персонажа с зафиксированным инпутом, считыванием .ini
 #            (move_speed, work_speed), поддержкой RVO2 Avoidance для обхода
 #            NavigationObstacle3D, спуском по дуге при Context Drop,
@@ -187,8 +187,9 @@ func _physics_process(delta: float) -> void:
 				move_and_slide()
 
 		State.DELIVERING:
-			# Склад полон — не крутим разгрузку
-			if data and data.item_amount > 0 and not decision.storage_has_space(target_storage):
+			# can_accept = false (полн/пусто) — не unload
+			if target_storage and is_instance_valid(target_storage) and data and data.item_amount > 0 \
+					and not WorkSite.can_accept(target_storage, self):
 				if decision.handle_full_storage_with_cargo():
 					move_and_slide()
 				else:
@@ -489,18 +490,12 @@ func _energy_mult() -> float:
 	return 1.0
 
 ## У work-point? Только _current_target_pos (WP), не центр site.
-func _at_work_point(site: Node3D = null) -> bool:
+func _at_work_point(_site: Node3D = null) -> bool:
 	var pos_xz := Vector2(global_position.x, global_position.z)
 	var tgt_xz := Vector2(_current_target_pos.x, _current_target_pos.z)
-	var lim := maxf(arrival_distance, 0.5)
-	if pos_xz.distance_to(tgt_xz) <= lim:
-		return true
-	# запас: WP-маркер site, если target ещё не выставлен
-	if site and is_instance_valid(site) and site.has_method("get_free_work_point"):
-		var wp = site.get_free_work_point(self)
-		if pos_xz.distance_to(Vector2(wp.x, wp.z)) <= lim:
-			return true
-	return false
+	return pos_xz.distance_to(tgt_xz) <= maxf(arrival_distance, 0.5)
+
+
 # --- РАБОЧИЕ ПРОЦЕССЫ ---
 
 func _process_gathering(delta: float) -> void:
@@ -579,12 +574,13 @@ func _nutrition_for_carried() -> float:
 
 
 func _process_delivering_unload(delta: float) -> void:
+	# Как gathering: только WorkSite API. deposit_food — внутри storage.do_work
 	if not target_storage or not is_instance_valid(target_storage):
 		_is_unloading_at_storage = false
 		current_state = State.IDLE
 		return
 
-	if not decision.storage_has_space(target_storage):
+	if not WorkSite.can_accept(target_storage, self):
 		_is_unloading_at_storage = false
 		decision.handle_full_storage_with_cargo()
 		return
@@ -600,7 +596,32 @@ func _process_delivering_unload(delta: float) -> void:
 	if _work_timer >= required_time:
 		_work_timer = 0.0
 		_is_unloading_at_storage = false
-		_deposit_food_to_storage()
+		var result: Dictionary = WorkSite.do_work(target_storage, self)
+		if not result.get("ok", false):
+			if task_manager:
+				task_manager.complete_current_task()
+			if target_storage.has_method("release_work_point"):
+				target_storage.release_work_point(self)
+			decision.handle_full_storage_with_cargo()
+			return
+		var xp_skill: String = str(result.get("xp_skill", skill_key))
+		var xp_per_cycle: float = WorkSite.xp_from_config()
+		if data.has_method("add_skill_xp"):
+			data.add_skill_xp(xp_skill, xp_per_cycle)
+		elif data.has_method("add_skill_exp"):
+			data.add_skill_exp(xp_skill, xp_per_cycle)
+		var take = result.get("take", {})
+		print("[Character] Deposited %s x%d" % [str(take.get("item", "?")), int(take.get("amount", 0))])
+		if task_manager:
+			task_manager.complete_current_task()
+		if target_storage.has_method("release_work_point"):
+			target_storage.release_work_point(self)
+		# назад на harvest если есть
+		if data and data.item_amount <= 0 and target_harvest and is_instance_valid(target_harvest):
+			if WorkSite.can_accept(target_harvest, self):
+				start_work_at(target_harvest)
+				return
+		current_state = State.IDLE
 
 func _process_clearing(delta: float) -> void:
 	if not target_obstacle or not is_instance_valid(target_obstacle):
@@ -848,84 +869,16 @@ func start_clearing_obstacle(obstacle_node: Node3D) -> void:
 			nav_agent.target_position = _current_target_pos
 
 func _find_nearest_storage_node() -> Node3D:
-	var storages = get_tree().get_nodes_in_group("storage")
-	if storages.size() > 0:
-		var nearest: Node3D = storages.front() as Node3D
-		if nearest:
-			var min_d: float = global_position.distance_to(nearest.global_position)
-			for s in storages:
-				var ns = s as Node3D
-				if ns:
-					var d = global_position.distance_to(ns.global_position)
-					if d < min_d:
-						min_d = d
-						nearest = ns
-			return nearest
-	return null
+	# знание «кто storage» — у StorageSite
+	return StorageSite.find_nearest(self)
 
 func _go_to_nearest_storage() -> void:
-	var nearest_storage = _find_nearest_storage_node()
+	var nearest_storage = StorageSite.find_nearest(self)
 	if nearest_storage:
-		start_delivering_to_storage(nearest_storage)
+		go_work(nearest_storage)
 	else:
-		print("[Character] No storage found in group 'storage'!")
+		print("[Character] No storage found!")
 		current_state = State.IDLE
-
-func _deposit_food_to_storage() -> void:
-	if not target_storage or not is_instance_valid(target_storage):
-		current_state = State.IDLE
-		return
-
-	if data.item_amount > 0:
-		var result: Dictionary
-		if WorkSite.is_site(target_storage):
-			result = WorkSite.do_work(target_storage, self)  # склад сам забирает груз
-		else:
-			# fallback legacy
-			if not decision.storage_has_space(target_storage):
-				result = {"ok": false, "reason": "full"}
-			else:
-				var deposited_amount: int = data.item_amount
-				var carried_type: String = data.carried_item if data.carried_item != "" else "resource"
-				if target_storage.has_method("deposit_food"):
-					target_storage.deposit_food(data.item_amount)
-				data.carried_item = ""
-				data.item_amount = 0
-				result = {"ok": true, "take": {"item": carried_type, "amount": deposited_amount}, "xp_skill": WorkSite.get_skill(target_storage, "trader")}
-
-		if not result.get("ok", false):
-			# Склад полон / ошибка — груз остаётся, ждём или едим
-			print("[Character] Deposit failed: %s" % str(result.get("reason", "unknown")))
-			if task_manager:
-				task_manager.complete_current_task()  # снять DELIVER из стека
-			if target_storage and is_instance_valid(target_storage) and target_storage.has_method("release_work_point"):
-				target_storage.release_work_point(self)
-			decision.handle_full_storage_with_cargo()
-			return
-
-		var xp_skill: String = str(result.get("xp_skill", WorkSite.get_skill(target_storage, "trader")))
-		var xp_per_cycle: float = WorkSite.xp_from_config()
-		if data.has_method("add_skill_xp"):
-			data.add_skill_xp(xp_skill, xp_per_cycle)
-		elif data.has_method("add_skill_exp"):
-			data.add_skill_exp(xp_skill, xp_per_cycle)
-		var take = result.get("take", {})
-		print("[Character] Deposited %s x%d" % [str(take.get("item", "?")), int(take.get("amount", 0))])
-
-	if task_manager:
-		task_manager.complete_current_task()
-
-	# Вернуться к harvest только если руки пусты и склад не переполнен (есть смысл)
-	if data and data.item_amount <= 0 and target_harvest and is_instance_valid(target_harvest):
-		if decision.storage_has_space() and WorkSite.can_accept(target_harvest, self):
-			start_work_at(target_harvest)
-			return
-
-	if target_storage and is_instance_valid(target_storage):
-		if target_storage.has_method("release_work_point"):
-			target_storage.release_work_point(self)
-
-	current_state = State.IDLE
 
 func _get_free_work_point_safe(node: Node3D) -> Vector3:
 	if not node or not is_instance_valid(node):

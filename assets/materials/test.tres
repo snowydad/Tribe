@@ -14,3 +14,5 @@ subsurf_scatter_skin_mode = true
 subsurf_scatter_transmittance_depth = 0.001
 backlight_enabled = true
 backlight = Color(0.124419644, 0.068297856, 0.07203931, 1)
+stencil_flags = 2
+stencil_outline_thickness = 0.1

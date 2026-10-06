@@ -2,6 +2,7 @@
 # storage.gd — склад как WorkSite (данные из storage.ini)
 # ==============================================================================
 extends Node3D
+class_name StorageSite
 
 @export var stored_food: int = 0
 @export var max_storage: int = 500
@@ -32,6 +33,24 @@ func _ready() -> void:
 		print("[Storage] Config loaded: work_time=%.1fs, max_storage=%d, skill=%s" % [work_time, max_storage, skill])
 
 	_update_dev_ui()
+
+
+## Ближайший склад к from (группа storage). Знает склад, не character.
+static func find_nearest(from: Node3D) -> Node3D:
+	if from == null or not is_instance_valid(from) or from.get_tree() == null:
+		return null
+	var best: Node3D = null
+	var best_d: float = INF
+	for n in from.get_tree().get_nodes_in_group("storage"):
+		var s := n as Node3D
+		if s == null or not is_instance_valid(s):
+			continue
+		var d: float = from.global_position.distance_to(s.global_position)
+		if d < best_d:
+			best_d = d
+			best = s
+	return best
+
 
 func get_work_time() -> float:
 	return work_time
