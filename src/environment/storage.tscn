@@ -4,12 +4,12 @@
 [ext_resource type="Material" uid="uid://hhnt00hd31k4" path="res://assets/materials/M_Storage.tres" id="2_gvi7j"]
 
 [sub_resource type="BoxMesh" id="BoxMesh_csncc"]
-size = Vector3(2, 1, 2)
+size = Vector3(2, 0.5, 2)
 
 [sub_resource type="SphereShape3D" id="SphereShape3D_2nke2"]
-radius = 1.0
 
-[sub_resource type="SphereShape3D" id="SphereShape3D_j07er"]
+[sub_resource type="CylinderShape3D" id="CylinderShape3D_w0wra"]
+height = 0.5
 radius = 2.0
 
 [sub_resource type="SphereMesh" id="SphereMesh_j07er"]
@@ -37,7 +37,7 @@ collision_layer = 4
 collision_mask = 0
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="InteractiveArea" unique_id=453137656]
-shape = SubResource("SphereShape3D_j07er")
+shape = SubResource("CylinderShape3D_w0wra")
 
 [node name="WorkPoints" type="Node3D" parent="." unique_id=1511302140]
 
@@ -53,26 +53,26 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.5, 0, 0)
 [node name="Marker3D_W" type="Marker3D" parent="WorkPoints" unique_id=1925697341]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.5, 0, 0)
 
+[node name="Dev" type="MeshInstance3D" parent="WorkPoints" unique_id=1569840112]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.15, -1.5)
+mesh = SubResource("SphereMesh_j07er")
+
+[node name="Dev2" type="MeshInstance3D" parent="WorkPoints" unique_id=1735317039]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.5000353, 0.15, -0.013854027)
+mesh = SubResource("SphereMesh_j07er")
+
+[node name="Dev3" type="MeshInstance3D" parent="WorkPoints" unique_id=824178556]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.0069446564, 0.15, 1.5139598)
+mesh = SubResource("SphereMesh_j07er")
+
+[node name="Dev4" type="MeshInstance3D" parent="WorkPoints" unique_id=1327534507]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.5208693, 0.15, 0.01392436)
+mesh = SubResource("SphereMesh_j07er")
+
 [node name="DevLabel" type="Label3D" parent="." unique_id=407215896]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
 billboard = 1
 alpha_cut = 1
 
 [node name="NavigationObstacle3D" type="NavigationObstacle3D" parent="." unique_id=1024809809]
-radius = 1.0
-
-[node name="Dev" type="MeshInstance3D" parent="." unique_id=1569840112]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.15, -1.5)
-mesh = SubResource("SphereMesh_j07er")
-
-[node name="Dev2" type="MeshInstance3D" parent="." unique_id=1735317039]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.5000353, 0.15, -0.013854027)
-mesh = SubResource("SphereMesh_j07er")
-
-[node name="Dev3" type="MeshInstance3D" parent="." unique_id=824178556]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.0069446564, 0.15, 1.5139598)
-mesh = SubResource("SphereMesh_j07er")
-
-[node name="Dev4" type="MeshInstance3D" parent="." unique_id=1327534507]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.5208693, 0.15, 0.01392436)
-mesh = SubResource("SphereMesh_j07er")
+radius = 0.4

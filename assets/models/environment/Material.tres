@@ -8,6 +8,7 @@ transparency = 2
 alpha_scissor_threshold = 0.6
 alpha_antialiasing_mode = 0
 cull_mode = 2
+depth_test = 1
 albedo_texture = ExtResource("1_rd2mg")
 metallic_specular = 0.11
 roughness = 0.96

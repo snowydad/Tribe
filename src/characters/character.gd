@@ -1,6 +1,6 @@
 # ==============================================================================
 # ФАЙЛ: src/characters/Character.gd
-# ОБНОВЛЕНО: 2026-10-04 17:05 CEST — death_cause + UI dead
+# ОБНОВЛЕНО: 2026-10-05 — go_work: click/drop site → WP → can_accept/do_work (единый контракт)
 # НАЗНАЧЕНИЕ: Контроллер персонажа с зафиксированным инпутом, считыванием .ini
 #            (move_speed, work_speed), поддержкой RVO2 Avoidance для обхода
 #            NavigationObstacle3D, спуском по дуге при Context Drop,
@@ -416,6 +416,29 @@ func _on_movement_finished() -> void:
 			var cur_t = task_manager.get_current_task()
 			if cur_t and cur_t.type == TaskManager.TaskType.MOVE_TO:
 				task_manager.complete_current_task()
+			elif cur_t and cur_t.type == TaskManager.TaskType.GATHER and cur_t.target_node:
+				start_harvesting(cur_t.target_node)
+				return
+			elif cur_t and cur_t.type == TaskManager.TaskType.DELIVER and cur_t.target_node:
+				start_delivering_to_storage(cur_t.target_node)
+				return
+			elif cur_t and cur_t.type == TaskManager.TaskType.CLEAR and cur_t.target_node:
+				start_clearing_obstacle(cur_t.target_node)
+				return
+
+		# go_work: дошли до WP текущего site
+		if target_storage and is_instance_valid(target_storage) and _at_work_point(target_storage):
+			if WorkSite.can_accept(target_storage, self):
+				start_delivering_to_storage(target_storage)
+				return
+			current_state = State.IDLE
+			return
+		if target_harvest and is_instance_valid(target_harvest) and _at_work_point(target_harvest):
+			if WorkSite.can_accept(target_harvest, self):
+				start_harvesting(target_harvest)
+				return
+			current_state = State.IDLE
+			return
 
 		if decision.hands_busy():
 			decision.resolve_cargo_action()
@@ -424,10 +447,14 @@ func _on_movement_finished() -> void:
 		current_state = State.IDLE
 
 	elif current_state == State.DELIVERING:
-		# Разгрузка только у склада, иначе продолжаем идти
+		# У WP: unload только can_accept, иначе idle
 		if target_storage and is_instance_valid(target_storage) and _at_work_point(target_storage):
-			_is_unloading_at_storage = true
-			_work_timer = 0.0
+			if WorkSite.can_accept(target_storage, self):
+				_is_unloading_at_storage = true
+				_work_timer = 0.0
+			else:
+				_is_unloading_at_storage = false
+				current_state = State.IDLE
 		else:
 			_is_unloading_at_storage = false
 			if target_storage and is_instance_valid(target_storage):
@@ -461,27 +488,19 @@ func _energy_mult() -> float:
 		return float(data.get_energy_speed_mult())
 	return 1.0
 
-## У work-point / рядом с сайтом?
-## ВАЖНО: не смотреть только на _current_target_pos — после drop это точка отпускания!
-## «На месте» = персонаж рядом с самим site (или с work-point этого site).
+## У work-point? Только _current_target_pos (WP), не центр site.
 func _at_work_point(site: Node3D = null) -> bool:
 	var pos_xz := Vector2(global_position.x, global_position.z)
-	var near := maxf(docking_distance, arrival_distance)
-
-	if site and is_instance_valid(site):
-		var site_xz := Vector2(site.global_position.x, site.global_position.z)
-		# 1) рядом с корнем сайта
-		if pos_xz.distance_to(site_xz) <= near:
+	var tgt_xz := Vector2(_current_target_pos.x, _current_target_pos.z)
+	var lim := maxf(arrival_distance, 0.5)
+	if pos_xz.distance_to(tgt_xz) <= lim:
+		return true
+	# запас: WP-маркер site, если target ещё не выставлен
+	if site and is_instance_valid(site) and site.has_method("get_free_work_point"):
+		var wp = site.get_free_work_point(self)
+		if pos_xz.distance_to(Vector2(wp.x, wp.z)) <= lim:
 			return true
-		# 2) _current_target_pos — только если он относится к этому site (не точка drop)
-		var tgt_xz := Vector2(_current_target_pos.x, _current_target_pos.z)
-		if pos_xz.distance_to(tgt_xz) <= arrival_distance and tgt_xz.distance_to(site_xz) <= near * 2.0:
-			return true
-		return false
-
-	# Без site — только «дошёл до назначенной точки» (MOVE_TO / drop)
-	var tgt_xz2 := Vector2(_current_target_pos.x, _current_target_pos.z)
-	return pos_xz.distance_to(tgt_xz2) <= arrival_distance
+	return false
 # --- РАБОЧИЕ ПРОЦЕССЫ ---
 
 func _process_gathering(delta: float) -> void:
@@ -659,30 +678,23 @@ func move_to_position(target_pos: Vector3) -> void:
 		nav_agent.target_position = target_pos
 
 
-## Context Drop: объект или пустое. Не start_work — приземление + think.
+## Context Drop: site → go_work; пусто → soft_move. Игрок-команда, без matrix.
 func on_context_drop(site: Node3D, land_pos: Vector3) -> void:
 	is_being_dragged = false
 	_is_unloading_at_storage = false
 	decision.want_storage_meal = false
 	_drop_think_left = -1.0
-	drop_site = site if site and is_instance_valid(site) else null
-	_awaiting_drop_decide = true
+	_awaiting_drop_decide = false
+	drop_site = null
 
-	var dest: Vector3 = land_pos
-	if drop_site:
-		dest = _get_free_work_point_safe(drop_site)
-		var cat := WorkSite.get_category(drop_site)
-		if cat == "harvest":
-			target_harvest = drop_site
-		elif cat == "deposit":
-			target_storage = drop_site
-		elif cat == "clear":
-			target_obstacle = drop_site
+	if site and is_instance_valid(site) and (
+		WorkSite.is_site(site) or site.has_method("do_work") or site.has_method("get_free_work_point")
+	):
+		go_work(site)
+		return
 
-	_soft_move_to(dest)
-	var flat = Vector3(dest.x, global_position.y, dest.z)
-	if is_on_floor() and global_position.distance_to(flat) <= maxf(arrival_distance, 0.5):
-		_begin_drop_think()
+	# пустое место
+	_soft_move_to(land_pos)
 
 
 ## Движение без set_user_override — очередь (persistent GATHER и т.д.) жива
@@ -717,7 +729,11 @@ func wander_nearby() -> void:
 	_soft_move_to(dest)
 
 
-## Универсальная точка входа: объект сам говорит, какой это тип работы (ini / WorkSite).
+## Единый вход: игрок/AI → go_work(site). Всегда WP, потом can_accept.
+func go_work(site: Node3D) -> void:
+	start_work_at(site)
+
+
 func start_work_at(site: Node3D) -> void:
 	if not site or not is_instance_valid(site):
 		return
@@ -730,12 +746,11 @@ func start_work_at(site: Node3D) -> void:
 		"clear":
 			start_clearing_obstacle(site)
 		"build":
-			# TODO: building FSM later
 			print("[Character] BUILD not implemented yet for %s" % site.name)
-			move_to_position(site.global_position)
+			_go_to_site_wp(site)
 		_:
-			# fallback: work point walk
-			move_to_position(_get_free_work_point_safe(site))
+			_go_to_site_wp(site)
+
 
 ## @deprecated имя; используй start_harvesting
 func start_gathering_at_berries(site: Node3D) -> void:
@@ -746,6 +761,7 @@ func start_harvesting(site: Node3D) -> void:
 	_release_all_work_points()
 	is_being_dragged = false
 	_is_unloading_at_storage = false
+	_awaiting_drop_decide = false
 	target_harvest = site
 	target_obstacle = null
 	_work_timer = 0.0
@@ -755,23 +771,16 @@ func start_harvesting(site: Node3D) -> void:
 		task_manager.set_user_override_task(TaskManager.Task.new(TaskManager.TaskType.GATHER, Vector3.ZERO, site, 10, true))
 
 	var site_ready := WorkSite.can_accept(site, self)
-	var at_site := _at_work_point(site)
-
-	if at_site and is_on_floor():
-		# Уже у куста на земле
+	if _at_work_point(site) and is_on_floor():
 		current_state = State.GATHERING if site_ready else State.IDLE
 	else:
-		# Далеко / в воздухе → идём (или летим дугой) к work point, НЕ gather на месте
 		current_state = State.MOVING
 		if nav_agent:
 			nav_agent.target_position = _current_target_pos
 
+
 func start_delivering_to_storage(storage_node: Node3D) -> void:
 	if not storage_node or not is_instance_valid(storage_node):
-		return
-	if not (data and data.item_amount > 0):
-		_is_unloading_at_storage = false
-		current_state = State.IDLE
 		return
 
 	if target_storage and is_instance_valid(target_storage) and target_storage != storage_node:
@@ -779,19 +788,44 @@ func start_delivering_to_storage(storage_node: Node3D) -> void:
 			target_storage.release_work_point(self)
 
 	is_being_dragged = false
+	_awaiting_drop_decide = false
 	target_storage = storage_node
 	target_obstacle = null
 	_work_timer = 0.0
 	_current_target_pos = _get_free_work_point_safe(storage_node)
 
+	if task_manager and data and data.item_amount > 0:
+		task_manager.set_user_override_task(TaskManager.Task.new(TaskManager.TaskType.DELIVER, Vector3.ZERO, storage_node, 10, true))
+
+	var can_work := WorkSite.can_accept(storage_node, self)
+
 	if _at_work_point(storage_node) and is_on_floor():
-		current_state = State.DELIVERING
-		_is_unloading_at_storage = true
+		if can_work:
+			current_state = State.DELIVERING
+			_is_unloading_at_storage = true
+		else:
+			_is_unloading_at_storage = false
+			current_state = State.IDLE
 	else:
-		current_state = State.DELIVERING
+		# Всегда к WP (с грузом и без) — как harvest
 		_is_unloading_at_storage = false
+		if can_work:
+			current_state = State.DELIVERING
+		else:
+			current_state = State.MOVING
 		if nav_agent:
 			nav_agent.target_position = _current_target_pos
+
+
+func _go_to_site_wp(site: Node3D) -> void:
+	_release_all_work_points()
+	is_being_dragged = false
+	_is_unloading_at_storage = false
+	_awaiting_drop_decide = false
+	_current_target_pos = _get_free_work_point_safe(site)
+	current_state = State.MOVING
+	if nav_agent:
+		nav_agent.target_position = _current_target_pos
 
 
 func start_clearing_obstacle(obstacle_node: Node3D) -> void:

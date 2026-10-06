@@ -150,21 +150,15 @@ func _find_interactable_node(collider: Node) -> Node3D:
 		return p as Node3D
 	return null
 
-## Передача интерактивного узла персонажу
+## Клик по interactable → go_work. Без знания harvest/storage/deliver.
 func _assign_task_by_target(character: CharacterBody3D, target: Node3D) -> void:
-	# Предпочитаем универсальный WorkSite API
-	if character.has_method("start_work_at") and (WorkSite.is_site(target) or target.has_method("do_work") or target.has_method("get_free_work_point")):
+	if character.has_method("go_work"):
+		character.go_work(target)
+		return
+	if character.has_method("start_work_at"):
 		character.start_work_at(target)
 		return
-	# Legacy fallback
-	if target.has_method("harvest_berry"):
-		character.start_harvesting(target)
-	elif target.has_method("clear_obstacle") or target.is_in_group("obstacle"):
-		character.start_clearing_obstacle(target)
-	elif target.has_method("deposit_food") or target.is_in_group("storage"):
-		character.start_delivering_to_storage(target)
-	else:
-		character.move_to_position(target.global_position)
+	character.move_to_position(target.global_position)
 
 func _handle_click(mouse_position: Vector2) -> void:
 	if not camera:
