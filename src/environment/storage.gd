@@ -1,5 +1,6 @@
 # ==============================================================================
 # storage.gd — склад как WorkSite (данные из storage.ini)
+# ОБНОВЛЕНО: 2026-10-06 — find_nearest only (static); space/food — instance methods
 # ==============================================================================
 extends Node3D
 class_name StorageSite
@@ -50,6 +51,7 @@ static func find_nearest(from: Node3D) -> Node3D:
 			best_d = d
 			best = s
 	return best
+
 
 
 func get_work_time() -> float:

@@ -1,4 +1,5 @@
 # ==============================================================================
+# ОБНОВЛЕНО: 2026-10-06 17:30 — world storage без StorageSite static (has_space/has_food на site)
 # ФАЙЛ: src/characters/CharacterDecision.gd
 # ОБНОВЛЕНО: 2026-10-06 — edible без hardcode berry
 # ОБНОВЛЕНО: 2026-10-04 15:11 CEST — edible via items.ini
@@ -55,6 +56,7 @@ func has_edible_cargo() -> bool:
 
 
 func storage_has_space(st: Node = null) -> bool:
+	# site: has_space() на объекте. Мир: обход group — место знает storage.has_space()
 	if st and is_instance_valid(st):
 		if st.has_method("has_space"):
 			return bool(st.has_space())
@@ -62,8 +64,9 @@ func storage_has_space(st: Node = null) -> bool:
 			return bool(st.can_accept_work(host))
 		return WorkSite.can_accept(st, host)
 	var tree = host.get_tree() if host else null
-	var storages = tree.get_nodes_in_group("storage") if tree else []
-	for s in storages:
+	if tree == null:
+		return false
+	for s in tree.get_nodes_in_group("storage"):
 		if s and is_instance_valid(s) and storage_has_space(s):
 			return true
 	return false
@@ -77,8 +80,9 @@ func storage_has_food(st: Node = null) -> bool:
 			return int(st.stored_food) > 0
 		return false
 	var tree = host.get_tree() if host else null
-	var storages = tree.get_nodes_in_group("storage") if tree else []
-	for s in storages:
+	if tree == null:
+		return false
+	for s in tree.get_nodes_in_group("storage"):
 		if s and is_instance_valid(s) and storage_has_food(s):
 			return true
 	return false
@@ -86,15 +90,27 @@ func storage_has_food(st: Node = null) -> bool:
 
 ## Склад полон (нет места под deposit)
 func storage_is_full() -> bool:
-	return not storage_has_space()
+	# есть ≥1 склад и ни у одного нет места
+	var tree = host.get_tree() if host else null
+	if tree == null:
+		return false
+	var found := false
+	for s in tree.get_nodes_in_group("storage"):
+		if s == null or not is_instance_valid(s):
+			continue
+		found = true
+		if storage_has_space(s):
+			return false
+	return found
 
 
 func find_storage_with_food() -> Node3D:
 	var tree = host.get_tree() if host else null
-	var storages = tree.get_nodes_in_group("storage") if tree else []
+	if tree == null:
+		return null
 	var best: Node3D = null
 	var best_d: float = INF
-	for s in storages:
+	for s in tree.get_nodes_in_group("storage"):
 		var ns = s as Node3D
 		if not ns or not is_instance_valid(ns):
 			continue
@@ -107,8 +123,8 @@ func find_storage_with_food() -> Node3D:
 	return best
 
 
-## G: full + energy==100 + hunger==0 → бездействует с грузом
-func is_cargo_hold_g() -> bool:
+
+func  is_cargo_hold_g() -> bool:
 	if not hands_busy():
 		return false
 	if storage_has_space():

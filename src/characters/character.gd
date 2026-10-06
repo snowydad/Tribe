@@ -1,6 +1,6 @@
 # ==============================================================================
 # ФАЙЛ: src/characters/Character.gd
-# ОБНОВЛЕНО: 2026-10-06 — harvest generic WorkSite; berries только в berries.gd
+# ОБНОВЛЕНО: 2026-10-06 — StorageSite.find_nearest (как в git); deposit via WorkSite
 # НАЗНАЧЕНИЕ: Контроллер персонажа с зафиксированным инпутом, считыванием .ini
 #            (move_speed, work_speed), поддержкой RVO2 Avoidance для обхода
 #            NavigationObstacle3D, спуском по дуге при Context Drop,
