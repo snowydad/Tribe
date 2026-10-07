@@ -274,12 +274,22 @@ func go_eat_from_storage() -> void:
 	host._is_unloading_at_storage = false
 	_cargo_drop_timer = 0.0
 	host.target_storage = st
-	host._current_target_pos = host._get_free_work_point_safe(st)
+	# keep WP if already near this storage
+	var keep: Vector3 = host._current_target_pos
+	var near_st: bool = host.global_position.distance_to(st.global_position) <= maxf(host.docking_distance * 1.5, 2.5)
+	var d_wp: float = Vector2(host.global_position.x, host.global_position.z).distance_to(Vector2(keep.x, keep.z))
+	if near_st and d_wp <= maxf(host.arrival_distance, 0.5) * 2.0:
+		host._current_target_pos = keep
+	else:
+		host._current_target_pos = host._get_free_work_point_safe(st)
+	# soft arrive: у WP или рядом со складом → есть
+	var arrive_lim: float = maxf(host.arrival_distance, 0.5) * 2.0
 	var pos_xz = Vector2(host.global_position.x, host.global_position.z)
 	var target_xz = Vector2(host._current_target_pos.x, host._current_target_pos.z)
-	if pos_xz.distance_to(target_xz) <= host.arrival_distance:
+	if pos_xz.distance_to(target_xz) <= arrive_lim or near_st:
 		withdraw_one_and_eat(st)
 	else:
+		host.move_intent = "eat"
 		host.current_state = host.State.MOVING
 		if host.nav_agent:
 			host.nav_agent.target_position = host._current_target_pos

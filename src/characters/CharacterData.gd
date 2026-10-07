@@ -1,3 +1,4 @@
+# ОБНОВЛЕНО: 2026-10-07 — talent XP/speed via talents_skills + xp_talent_multiplier
 # ==============================================================================
 # ОБНОВЛЕНО: 2026-10-05 12:05 CEST — hungry: no rest regen, only drain
 # НАЗНАЧЕНИЕ: Ресурс хранения персональных данных, физических статов,
@@ -105,12 +106,33 @@ func _connect_time_signals() -> void:
 # РАСЧЁТ ЭФФЕКТИВНОСТИ И ПРОГРЕССИИ НАВЫКОВ
 # ------------------------------------------------------------------------------
 
+## skill входит в талант? (talents_skills.ini: forager = "forager, farmer, ...")
+func talent_covers_skill(skill_name: String) -> bool:
+	var sk := str(skill_name).strip_edges().to_lower()
+	if sk.is_empty():
+		return false
+	var tal := str(talent).strip_edges().to_lower()
+	if tal.is_empty():
+		return false
+	if tal == sk:
+		return true
+	if not ConfigLoader or not ConfigLoader.has_method("get_skill_value"):
+		return false
+	var raw := str(ConfigLoader.get_skill_value("talents_skills", tal, ""))
+	raw = raw.replace('"', "").replace("'", "")
+	for part in raw.split(","):
+		if part.strip_edges().to_lower() == sk:
+			return true
+	return false
+
+
 func get_effective_work_speed(skill_name: String) -> float:
 	var base_speed: float = ConfigLoader.get_character_value("base_stats", "work_speed", 1.0) if ConfigLoader else 1.0
 
 	var talent_multiplier: float = 1.0
-	if talent == skill_name and ConfigLoader:
-		talent_multiplier = ConfigLoader.get_skill_value("talents", skill_name, 1.25)
+	if talent_covers_skill(skill_name) and ConfigLoader:
+		# множитель по имени таланта (forager=1.25), не по skill
+		talent_multiplier = float(ConfigLoader.get_skill_value("talents", str(talent).strip_edges().to_lower(), 1.25))
 
 	var skill_level: int = 0
 	if skills.has(skill_name):
@@ -120,6 +142,11 @@ func get_effective_work_speed(skill_name: String) -> float:
 
 	var effective_speed = base_speed * talent_multiplier * (1.0 + float(skill_level) * bonus_per_lvl)
 	return effective_speed
+
+
+func add_skill_xp(skill_name: String, exp_amount: float) -> void:
+	add_skill_exp(skill_name, exp_amount)
+
 
 func add_skill_exp(skill_name: String, exp_amount: float) -> void:
 	if not skills.has(skill_name):
@@ -132,8 +159,16 @@ func add_skill_exp(skill_name: String, exp_amount: float) -> void:
 	if current_skill["level"] >= max_lvl:
 		return
 
-	current_skill["exp"] += exp_amount
-	print("[CharacterData] %s gained %.1f XP in skill '%s' (Total XP: %.1f)" % [character_name, exp_amount, skill_name, current_skill["exp"]])
+	var gained: float = exp_amount
+	if talent_covers_skill(skill_name) and ConfigLoader:
+		var xp_mult: float = float(ConfigLoader.get_skill_value("skill_progression", "xp_talent_multiplier", 2.0))
+		gained *= xp_mult
+
+	current_skill["exp"] += gained
+	print("[CharacterData] %s gained %.1f XP in skill '%s' (Total XP: %.1f)%s" % [
+		character_name, gained, skill_name, current_skill["exp"],
+		" [talent x%.1f]" % (gained / exp_amount if exp_amount > 0.0 else 1.0) if talent_covers_skill(skill_name) else ""
+	])
 
 	while current_skill["exp"] >= exp_for_levelup and current_skill["level"] < max_lvl:
 		current_skill["exp"] -= exp_for_levelup

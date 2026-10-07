@@ -1,6 +1,6 @@
 # ==============================================================================
 # CharacterInfoPanel.gd — HUD: FPS + время + инфо выбранного перса
-# ОБНОВЛЕНО: 2026-10-04 17:05 CEST — action dead + death cause
+# ОБНОВЛЕНО: 2026-10-07 — action via character.get_action_label (think/wander/eat)
 # res://src/ui/CharacterInfoPanel.gd
 # ==============================================================================
 extends PanelContainer
@@ -147,70 +147,26 @@ func _format_skills_line(d) -> String:
 		return "skills: -"
 	return " | ".join(parts)
 
-## Текущее действие из current_state + инвентарь
+## Текущее действие: character.get_action_label() (think/wander/eat/walk:eat…)
 func _format_current_action() -> String:
 	var ch = _selected
-	var state_val = ch.get("current_state")
-	var state_name := "idle"
-	# enum State { IDLE, MOVING, CARRIED, GATHERING, DELIVERING, CLEARING, EATING, DEAD }
-	if state_val != null:
-		match int(state_val):
-			0: state_name = "idle"
-			1: state_name = "walk"
-			2: state_name = "carried"
-			3: state_name = "gather"
-			4: state_name = "deliver"
-			5: state_name = "clear"
-			6: state_name = "eat"
-			7: state_name = "dead"
-			_:
-				# если добавят стейты — имя из enum keys
-				if ch.get("State") != null:
-					state_name = str(state_val)
-				else:
-					state_name = str(state_val)
-
-	var d = ch.get("data")
-	var item := ""
-	var amount := 0
-	if d != null:
-		if "carried_item" in d:
-			item = str(d.carried_item)
-		if "item_amount" in d:
-			amount = int(d.item_amount)
-
-	var cargo := ""
-	if item != "" and amount > 0:
-		cargo = "%s%d" % [item, amount]
-
-	# Мёртв — сразу понятная строка (+ причина если есть)
-	if state_name == "dead":
-		var cause := ""
-		if d != null and "death_cause" in d and str(d.death_cause) != "":
-			cause = str(d.death_cause)
-		if cause != "":
-			return "dead (%s)" % cause
-		return "dead"
-
-	if state_name == "walk" and cargo != "":
-		return "carry: %s" % cargo
-	if state_name == "deliver":
-		if cargo != "":
-			return "delivering: %s" % cargo
-		return "delivering"
-	if state_name == "gather":
-		return "gather"
-	if state_name == "eat":
-		return "eat"
-	if state_name == "clear":
-		return "clear"
-	if state_name == "carried":
-		return "carried"
-	if state_name == "idle":
-		if cargo != "":
-			return "idle (hold: %s)" % cargo
+	if ch != null and ch.has_method("get_action_label"):
+		return str(ch.get_action_label())
+	# fallback если старый character без метода
+	var state_val = ch.get("current_state") if ch else null
+	if state_val == null:
 		return "idle"
-	return state_name
+	match int(state_val):
+		0: return "idle"
+		1: return "walk"
+		2: return "carried"
+		3: return "gather"
+		4: return "deliver"
+		5: return "clear"
+		6: return "eat"
+		7: return "dead"
+		_:
+			return str(state_val)
 
 
 func _format_death_line(d) -> String:
