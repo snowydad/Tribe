@@ -83,15 +83,15 @@ func load_all_stats_from_config() -> void:
 	var default_intelligence = ConfigLoader.get_character_value("initial_stats", "intelligence", 10)
 
 	stats = {
-		"strength": {"value": default_strength, "exp": 0.0},
-		"intelligence": {"value": default_intelligence, "exp": 0.0},
+		"strength": {"value": default_strength, "xp": 0.0},
+		"intelligence": {"value": default_intelligence, "xp": 0.0},
 	}
 
 	var skill_list = ["forager", "worker", "builder", "trader", "lumberjack", "farmer"]
 	skills.clear()
 	for skill_key in skill_list:
 		var init_lvl = ConfigLoader.get_skill_value("initial_skills", skill_key, 0)
-		skills[skill_key] = {"level": init_lvl, "exp": 0.0}
+		skills[skill_key] = {"level": init_lvl, "xp": 0.0}
 
 ## Подписка на глобальные события времени
 func _connect_time_signals() -> void:
@@ -144,34 +144,38 @@ func get_effective_work_speed(skill_name: String) -> float:
 	return effective_speed
 
 
-func add_skill_xp(skill_name: String, exp_amount: float) -> void:
-	add_skill_exp(skill_name, exp_amount)
+func add_skill_xp(skill_name: String, xp_amount: float) -> void:
+	add_skill_exp(skill_name, xp_amount)
 
 
-func add_skill_exp(skill_name: String, exp_amount: float) -> void:
+func add_skill_exp(skill_name: String, xp_amount: float) -> void:
 	if not skills.has(skill_name):
-		skills[skill_name] = {"level": 0, "exp": 0.0}
+		skills[skill_name] = {"level": 0, "xp": 0.0}
 
 	var max_lvl: int = ConfigLoader.get_skill_value("skill_progression", "max_level", 10) if ConfigLoader else 10
-	var exp_for_levelup: float = ConfigLoader.get_skill_value("skill_progression", "exp_for_level_up", 100.0) if ConfigLoader else 100.0
+	var xp_for_levelup: float = ConfigLoader.get_skill_value("skill_progression", "xp_for_level_up", 100.0) if ConfigLoader else 100.0
 
 	var current_skill = skills[skill_name]
+	# Миграция: старые сохранения могут иметь ключ "exp"
+	if not current_skill.has("xp"):
+		current_skill["xp"] = float(current_skill.get("exp", 0.0))
+		current_skill.erase("exp")
 	if current_skill["level"] >= max_lvl:
 		return
 
-	var gained: float = exp_amount
+	var gained: float = xp_amount
 	if talent_covers_skill(skill_name) and ConfigLoader:
 		var xp_mult: float = float(ConfigLoader.get_skill_value("skill_progression", "xp_talent_multiplier", 2.0))
 		gained *= xp_mult
 
-	current_skill["exp"] += gained
+	current_skill["xp"] += gained
 	print("[CharacterData] %s gained %.1f XP in skill '%s' (Total XP: %.1f)%s" % [
-		character_name, gained, skill_name, current_skill["exp"],
-		" [talent x%.1f]" % (gained / exp_amount if exp_amount > 0.0 else 1.0) if talent_covers_skill(skill_name) else ""
+		character_name, gained, skill_name, current_skill["xp"],
+		" [talent x%.1f]" % (gained / xp_amount if xp_amount > 0.0 else 1.0) if talent_covers_skill(skill_name) else ""
 	])
 
-	while current_skill["exp"] >= exp_for_levelup and current_skill["level"] < max_lvl:
-		current_skill["exp"] -= exp_for_levelup
+	while current_skill["xp"] >= xp_for_levelup and current_skill["level"] < max_lvl:
+		current_skill["xp"] -= xp_for_levelup
 		current_skill["level"] += 1
 		print("[CharacterData] LEVEL UP! %s reached level %d in '%s'!" % [character_name, current_skill["level"], skill_name])
 

@@ -137,11 +137,11 @@ func _format_skills_line(d) -> String:
 	for key in skills.keys():
 		var entry = skills[key]
 		var lvl: int = 0
-		var exp_v: float = 0.0
+		var xp_v: float = 0.0
 		if entry is Dictionary:
 			lvl = int(entry.get("level", 0))
-			exp_v = float(entry.get("exp", 0.0))
-		if lvl > 0 or exp_v > 0.0:
+			xp_v = float(entry.get("xp", entry.get("exp", 0.0)))  # "exp" — fallback для старых сохранений
+		if lvl > 0 or xp_v > 0.0:
 			parts.append("%s:%d" % [str(key), lvl])
 	if parts.is_empty():
 		return "skills: -"
