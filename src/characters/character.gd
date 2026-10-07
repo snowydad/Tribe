@@ -1,6 +1,6 @@
 # ==============================================================================
 # ФАЙЛ: src/characters/Character.gd
-# ОБНОВЛЕНО: 2026-10-07 — get_action_label: think/wander/eat/walk:eat…
+# ОБНОВЛЕНО: 2026-10-07 — deliver: ALWAYS storage WP (never bush keep_pos)
 # НАЗНАЧЕНИЕ: Контроллер персонажа с зафиксированным инпутом, считыванием .ini
 #            (move_speed, work_speed), поддержкой RVO2 Avoidance для обхода
 #            NavigationObstacle3D, спуском по дуге при Context Drop,
@@ -189,8 +189,11 @@ func _physics_process(delta: float) -> void:
 				move_and_slide()
 
 		State.DELIVERING:
-			# без груза — не walk-deliver
+			# без груза — не deliver; сброс site
 			if not (data and data.item_amount > 0) and not _is_unloading_at_storage:
+				_is_unloading_at_storage = false
+				target_storage = null
+				move_intent = ""
 				current_state = State.IDLE
 				move_and_slide()
 			# can_accept = false (полн) — не unload
@@ -210,10 +213,11 @@ func _physics_process(delta: float) -> void:
 				_process_delivering_unload(delta)
 				move_and_slide()
 			else:
-				# у склада + cargo + can_accept → unload (не walk forever)
+				# unload только у WP склада (не у куста)
 				if target_storage and is_instance_valid(target_storage) and data and data.item_amount > 0 \
 						and is_on_floor() \
-						and (_at_work_point(target_storage) or _near_site(target_storage)) \
+						and _at_work_point(target_storage) \
+						and global_position.distance_to(target_storage.global_position) <= maxf(docking_distance * 2.0, 4.0) \
 						and WorkSite.can_accept(target_storage, self):
 					_is_unloading_at_storage = true
 					_work_timer = 0.0
@@ -467,23 +471,25 @@ func _on_movement_finished() -> void:
 		current_state = State.IDLE
 
 	elif current_state == State.DELIVERING:
-		# soft arrive: WP или рядом со складом
-		if target_storage and is_instance_valid(target_storage) \
-				and (_at_work_point(target_storage) or _near_site(target_storage)):
+		# unload только у WP
+		if target_storage and is_instance_valid(target_storage) and _at_work_point(target_storage) \
+				and global_position.distance_to(target_storage.global_position) <= maxf(docking_distance * 2.0, 4.0):
 			if data and data.item_amount > 0 and WorkSite.can_accept(target_storage, self):
 				_is_unloading_at_storage = true
 				_work_timer = 0.0
 			else:
 				_is_unloading_at_storage = false
+				if not (data and data.item_amount > 0):
+					target_storage = null
 				current_state = State.IDLE
 		else:
-			# далеко: один retarget, не бесконечный
 			_is_unloading_at_storage = false
 			if target_storage and is_instance_valid(target_storage) and data and data.item_amount > 0:
 				_current_target_pos = _get_free_work_point_safe(target_storage)
 				if nav_agent:
 					nav_agent.target_position = _current_target_pos
 			else:
+				target_storage = null
 				current_state = State.IDLE
 
 func _stop_horizontal_movement(delta: float) -> void:
@@ -591,6 +597,10 @@ func _process_eating(delta: float) -> void:
 		print("[Character] %s finished eating %s! New hunger: %.1f%%" % [data.character_name, item_name, data.hunger])
 		if task_manager:
 			task_manager.complete_current_task()
+		if decision:
+			decision.want_storage_meal = false
+		move_intent = ""
+		target_storage = null
 		current_state = State.IDLE
 
 
@@ -880,9 +890,11 @@ func start_delivering_to_storage(storage_node: Node3D) -> void:
 	if not storage_node or not is_instance_valid(storage_node):
 		return
 
-	# без груза — не ходить к складу как deliver
+	# без груза — не deliver
 	if not (data and data.item_amount > 0):
 		_is_unloading_at_storage = false
+		target_storage = null
+		move_intent = ""
 		current_state = State.IDLE
 		return
 
@@ -895,36 +907,26 @@ func start_delivering_to_storage(storage_node: Node3D) -> void:
 	move_intent = "deliver"
 	target_obstacle = null
 	_work_timer = 0.0
+	_is_unloading_at_storage = false
+	target_storage = storage_node
 
-	var keep_pos: Vector3 = _current_target_pos
-	var d_wp: float = Vector2(global_position.x, global_position.z).distance_to(Vector2(keep_pos.x, keep_pos.z))
-	var d_site: float = global_position.distance_to(storage_node.global_position)
-	var already_on_wp: bool = is_on_floor() \
-		and d_wp <= maxf(arrival_distance, 0.5) * 2.0 \
-		and d_site <= maxf(docking_distance * 2.0, 4.0)
-
-	if already_on_wp:
-		target_storage = storage_node
-		_current_target_pos = keep_pos
-	else:
-		target_storage = storage_node
-		_current_target_pos = _get_free_work_point_safe(storage_node)
+	# ВСЕГДА WP склада (не keep_pos куста — иначе unload у berries)
+	_current_target_pos = _get_free_work_point_safe(storage_node)
 
 	if task_manager:
 		task_manager.set_user_override_task(TaskManager.Task.new(TaskManager.TaskType.DELIVER, Vector3.ZERO, storage_node, 10, true))
 
 	var can_work := WorkSite.can_accept(storage_node, self)
-	var near: bool = already_on_wp or _at_work_point(storage_node) or _near_site(storage_node)
+	# «на WP» = у точки СКЛАДА, не у куста
+	var on_storage_wp: bool = is_on_floor() and _at_work_point(storage_node)
 
-	if near and is_on_floor():
-		if can_work:
-			current_state = State.DELIVERING
-			_is_unloading_at_storage = true
-		else:
-			_is_unloading_at_storage = false
-			current_state = State.IDLE
+	if on_storage_wp and can_work:
+		current_state = State.DELIVERING
+		_is_unloading_at_storage = true
+	elif on_storage_wp and not can_work:
+		current_state = State.IDLE
 	else:
-		_is_unloading_at_storage = false
+		# идём к WP склада
 		current_state = State.DELIVERING
 		if nav_agent:
 			nav_agent.target_position = _current_target_pos
@@ -1077,7 +1079,12 @@ func _update_dev_ui() -> void:
 	if target_harvest and is_instance_valid(target_harvest):
 		site_hint = "H:" + WorkSite.get_type(target_harvest)
 	elif target_storage and is_instance_valid(target_storage):
-		site_hint = "D:" + WorkSite.get_type(target_storage)
+		if decision and decision.want_storage_meal:
+			site_hint = "E:meal"
+		elif data and data.item_amount > 0:
+			site_hint = "D:" + WorkSite.get_type(target_storage)
+		else:
+			site_hint = "S:" + WorkSite.get_type(target_storage)
 
 	var text_info = "%s (%s) [%s]%s\n" % [data.character_name, gender_str, state_str, " *SEL*" if is_selected else ""]
 	text_info += "Site: %s\n" % site_hint
