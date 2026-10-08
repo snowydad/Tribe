@@ -1,6 +1,6 @@
 # ==============================================================================
 # storage.gd — склад как WorkSite (данные из storage.ini)
-# ОБНОВЛЕНО: 2026-10-06 — find_nearest only (static); space/food — instance methods
+# ОБНОВЛЕНО: 2026-10-08 — WP: nearest free Marker3D (no sticky occupied)
 # ==============================================================================
 extends Node3D
 class_name StorageSite
@@ -118,26 +118,55 @@ func do_work(worker: Node = null) -> Dictionary:
 		"xp_skill": skill,
 	}
 
+## Только Marker3D (не Dev и не прочий мусор в WorkPoints)
+func _work_markers() -> Array:
+	var out: Array = []
+	if work_points_container == null:
+		return out
+	for c in work_points_container.get_children():
+		if c is Marker3D:
+			out.append(c)
+	return out
+
+
+## Ближайшая СВОБОДНАЯ WP к requester (не липнем к занятой)
 func get_free_work_point(requester: Node3D = null) -> Vector3:
 	_cleanup_slots()
+	var markers: Array = _work_markers()
 	var requester_id: int = requester.get_instance_id() if requester else 0
-	var slot_index: int = 0
-	if requester_id != 0 and _occupied_slots.has(requester_id):
-		slot_index = _occupied_slots[requester_id]
-	else:
-		slot_index = _find_first_free_slot()
+	var from_pos: Vector3 = requester.global_position if requester != null and is_instance_valid(requester) else global_position
+
+	# слоты, занятые другими персами
+	var used_by_others: Dictionary = {}
+	for rid in _occupied_slots.keys():
+		if int(rid) == requester_id:
+			continue
+		used_by_others[int(_occupied_slots[rid])] = true
+
+	var best_i: int = -1
+	var best_d: float = INF
+	for i in range(markers.size()):
+		if used_by_others.has(i):
+			continue
+		var m: Node3D = markers[i] as Node3D
+		if m == null:
+			continue
+		var d: float = from_pos.distance_to(m.global_position)
+		if d < best_d:
+			best_d = d
+			best_i = i
+
+	if best_i >= 0:
 		if requester_id != 0:
-			_occupied_slots[requester_id] = slot_index
+			_occupied_slots[requester_id] = best_i
+		return (markers[best_i] as Node3D).global_position
 
-	if work_points_container and work_points_container.get_child_count() > 0:
-		var children = work_points_container.get_children()
-		if slot_index < children.size():
-			var wp_node = children[slot_index] as Node3D
-			if wp_node:
-				return wp_node.global_position
-
-	var angle: float = slot_index * (TAU / float(max(1, procedural_slots_count)))
-	var offset = Vector3(cos(angle) * procedural_radius, 0.0, sin(angle) * procedural_radius)
+	# все Marker заняты — procedural снаружи
+	var slot_index: int = _find_first_free_slot()
+	if requester_id != 0:
+		_occupied_slots[requester_id] = slot_index
+	var angle: float = float(slot_index) * (TAU / float(max(1, procedural_slots_count)))
+	var offset := Vector3(cos(angle) * procedural_radius, 0.0, sin(angle) * procedural_radius)
 	return global_position + offset
 
 func release_work_point(requester: Node3D) -> void:

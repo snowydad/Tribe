@@ -1,3 +1,4 @@
+# ОБНОВЛЕНО: 2026-10-08 — WP: nearest free Marker3D (same as storage)
 # ==============================================================================
 # ОБНОВЛЕНО: 2026-10-06 — class_name BerriesSite; berry-логика только здесь
 # berries.gd — куст ягод как WorkSite (данные из berries.ini)
@@ -169,23 +170,50 @@ func do_work(_worker: Node = null) -> Dictionary:
 	}
 
 
+func _work_markers() -> Array:
+	var out: Array = []
+	var container: Node3D = work_points_parent if work_points_parent else get_node_or_null("WorkPoints") as Node3D
+	if container == null:
+		return out
+	for c in container.get_children():
+		if c is Marker3D:
+			out.append(c)
+	return out
+
+
 func get_free_work_point(requester: Node3D = null) -> Vector3:
+	var markers: Array = _work_markers()
 	var req_id: int = requester.get_instance_id() if requester else 0
-	var slot_index: int = 0
-	if _occupied_slots.has(req_id):
-		slot_index = _occupied_slots[req_id]
-	else:
-		slot_index = _find_next_free_slot_index()
+	var from_pos: Vector3 = requester.global_position if requester != null and is_instance_valid(requester) else global_position
+
+	var used_by_others: Dictionary = {}
+	for rid in _occupied_slots.keys():
+		if int(rid) == req_id:
+			continue
+		used_by_others[int(_occupied_slots[rid])] = true
+
+	var best_i: int = -1
+	var best_d: float = INF
+	for i in range(markers.size()):
+		if used_by_others.has(i):
+			continue
+		var m: Node3D = markers[i] as Node3D
+		if m == null:
+			continue
+		var d: float = from_pos.distance_to(m.global_position)
+		if d < best_d:
+			best_d = d
+			best_i = i
+
+	if best_i >= 0:
 		if req_id != 0:
-			_occupied_slots[req_id] = slot_index
+			_occupied_slots[req_id] = best_i
+		return (markers[best_i] as Node3D).global_position
 
-	if work_points_parent and work_points_parent.get_child_count() > 0:
-		var children = work_points_parent.get_children()
-		var point_node = children[slot_index % children.size()] as Node3D
-		if point_node:
-			return point_node.global_position
-
-	var angle: float = slot_index * (PI / 3.0)
+	var slot_index: int = _find_next_free_slot_index()
+	if req_id != 0:
+		_occupied_slots[req_id] = slot_index
+	var angle: float = float(slot_index) * (PI / 3.0)
 	var offset = Vector3(cos(angle), 0.0, sin(angle)) * 1.0
 	return global_position + offset
 

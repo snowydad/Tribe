@@ -129,35 +129,17 @@ ripening_time = 86400.0
 
 [node name="berries" parent="." unique_id=359153156 instance=ExtResource("2_jpmde")]
 
-[node name="Berry_b_001" parent="berries/Armature/Skeleton3D" parent_id_path=PackedInt32Array(359153156, 441932580) index="0" unique_id=842171067]
-transform = Transform3D(-0.99999976, -0.00034041057, 2.6015186e-08, 0.0003404103, -0.9999997, -3.10473e-08, -9.250289e-08, -3.107702e-08, 0.99999976, 0.4727127, 0.808902, 2.0987122e-07)
-
 [node name="Berry_b_008" parent="berries/Armature/Skeleton3D" parent_id_path=PackedInt32Array(359153156, 441932580) index="1" unique_id=1127719655]
-transform = Transform3D(0.78638315, -0.0003416296, 0.61773884, -0.0002686706, -0.9999996, -0.00021101363, 0.6177387, -3.072215e-08, -0.7863831, 0.39762336, 0.4746896, -0.26709586)
+transform = Transform3D(0.7863831, 7.916242e-09, 0.61773866, -1.3969839e-08, -0.99999964, 3.0733645e-08, 0.6177387, -3.2316798e-08, -0.7863831, 0.40184766, 0.47278857, -0.26709595)
 
 [node name="Berry_b_003" parent="berries/Armature/Skeleton3D" parent_id_path=PackedInt32Array(359153156, 441932580) index="2" unique_id=1659760714]
-transform = Transform3D(0.3871181, -0.00034165912, 0.92203, -0.00013229132, -0.9999998, -0.00031500764, 0.9220299, -3.139577e-08, -0.3871181, 0.16373739, 0.8077706, -0.43420094)
-
-[node name="Berry_b_009" parent="berries/Armature/Skeleton3D" parent_id_path=PackedInt32Array(359153156, 441932580) index="3" unique_id=639056318]
-transform = Transform3D(0.44834954, -0.00034032797, -0.8938581, -0.00015255799, -1, 0.00030421856, -0.89385813, -3.1082728e-08, -0.44834957, -0.15219119, 0.45857435, -0.44727576)
+transform = Transform3D(0.3871181, -2.0023435e-08, 0.92203003, -3.7718564e-08, -0.9999998, -6.519258e-09, 0.9220299, -3.220093e-08, -0.3871182, 0.16953994, 0.806972, -0.434201)
 
 [node name="Berry_b_004" parent="berries/Armature/Skeleton3D" parent_id_path=PackedInt32Array(359153156, 441932580) index="4" unique_id=1471418389]
-transform = Transform3D(0.70027876, -0.0003416599, -0.7138693, -0.00023923471, -0.9999998, 0.0002439222, -0.7138693, -3.12248e-08, -0.70027876, -0.3555154, 0.7853786, -0.25370574)
-
-[node name="Berry_b_005" parent="berries/Armature/Skeleton3D" parent_id_path=PackedInt32Array(359153156, 441932580) index="5" unique_id=208156949]
-transform = Transform3D(-0.96536076, -0.00034171526, -0.26091743, 0.00032988642, -0.99999946, 8.912986e-05, -0.2609174, -3.0658345e-08, 0.9653608, -0.5138302, 0.46972197, -0.0025239878)
-
-[node name="Berry_b" parent="berries/Armature/Skeleton3D" parent_id_path=PackedInt32Array(359153156, 441932580) index="6" unique_id=569618932]
-transform = Transform3D(-0.9292997, -0.00034165807, -0.3693257, 0.00031751423, -0.9999998, 0.00012615367, -0.36932573, -3.159584e-08, 0.9292997, -0.36335564, 0.765674, 0.24228035)
-
-[node name="Berry_b_006" parent="berries/Armature/Skeleton3D" parent_id_path=PackedInt32Array(359153156, 441932580) index="7" unique_id=44734592]
-transform = Transform3D(-0.06298503, -0.00034167297, 0.99801403, 2.1489177e-05, -0.9999996, -0.00034099625, 0.9980143, -3.1170913e-08, 0.062985025, -0.16154489, 0.4471823, 0.44340548)
+transform = Transform3D(0.70027876, -1.9557774e-08, -0.71386915, 7.916242e-09, -0.9999996, 3.655441e-08, -0.7138691, -3.1269593e-08, -0.70027876, -0.34981287, 0.78703666, -0.2537058)
 
 [node name="Berry_b_002" parent="berries/Armature/Skeleton3D" parent_id_path=PackedInt32Array(359153156, 441932580) index="8" unique_id=834870284]
-transform = Transform3D(0.01921882, -0.0003381616, 0.99981517, -6.530221e-06, -0.9999997, -0.00033809833, 0.99981505, -3.1173027e-08, -0.01921882, 0.1327661, 0.7885913, 0.4367856)
-
-[node name="Berry_b_007" parent="berries/Armature/Skeleton3D" parent_id_path=PackedInt32Array(359153156, 441932580) index="9" unique_id=402701270]
-transform = Transform3D(0.99050397, -0.00034036982, -0.1374827, -0.00033713336, -0.99999994, 4.682417e-05, -0.13748272, -2.9541004e-08, -0.9905039, 0.38399398, 0.46126276, 0.30946288)
+transform = Transform3D(0.01921882, -6.984919e-08, 0.99981517, -3.3614924e-08, -0.9999998, -6.984919e-08, 0.9998151, -3.2074553e-08, -0.019218821, 0.13847834, 0.7879397, 0.43678552)
 
 [node name="AnimationTree" type="AnimationTree" parent="berries" unique_id=705346421]
 tree_root = SubResource("AnimationNodeStateMachine_k2qrw")
@@ -201,22 +183,6 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0)
 [node name="Marker3D_W" type="Marker3D" parent="WorkPoints" unique_id=685941968]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1, 0, 0)
 
-[node name="Dev" type="MeshInstance3D" parent="WorkPoints" unique_id=538502338]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.14395672, 0.972072)
-mesh = SubResource("SphereMesh_csncc")
-
-[node name="Dev2" type="MeshInstance3D" parent="WorkPoints" unique_id=1453520382]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.0055866, 0.14395672, -0.007992446)
-mesh = SubResource("SphereMesh_csncc")
-
-[node name="Dev3" type="MeshInstance3D" parent="WorkPoints" unique_id=524894444]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.020418167, 0.14395672, -1.0084748)
-mesh = SubResource("SphereMesh_csncc")
-
-[node name="Dev4" type="MeshInstance3D" parent="WorkPoints" unique_id=1393035682]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.0055871, 0.14395672, 0.0022165775)
-mesh = SubResource("SphereMesh_csncc")
-
 [node name="DevLabel" type="Label3D" parent="." unique_id=1660290718]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.3506087, 0.49014282)
 billboard = 2
@@ -224,5 +190,21 @@ alpha_cut = 1
 
 [node name="NavigationObstacle3D" type="NavigationObstacle3D" parent="." unique_id=2080193549]
 radius = 0.4
+
+[node name="Dev" type="MeshInstance3D" parent="." unique_id=538502338]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.14395672, 0.972072)
+mesh = SubResource("SphereMesh_csncc")
+
+[node name="Dev2" type="MeshInstance3D" parent="." unique_id=1453520382]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.0055866, 0.14395672, -0.007992446)
+mesh = SubResource("SphereMesh_csncc")
+
+[node name="Dev3" type="MeshInstance3D" parent="." unique_id=524894444]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.020418167, 0.14395672, -1.0084748)
+mesh = SubResource("SphereMesh_csncc")
+
+[node name="Dev4" type="MeshInstance3D" parent="." unique_id=1393035682]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.0055871, 0.14395672, 0.0022165775)
+mesh = SubResource("SphereMesh_csncc")
 
 [editable path="berries"]

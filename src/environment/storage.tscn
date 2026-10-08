@@ -53,22 +53,6 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.5, 0, 0)
 [node name="Marker3D_W" type="Marker3D" parent="WorkPoints" unique_id=1925697341]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.5, 0, 0)
 
-[node name="Dev" type="MeshInstance3D" parent="WorkPoints" unique_id=1569840112]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.15, -1.5)
-mesh = SubResource("SphereMesh_j07er")
-
-[node name="Dev2" type="MeshInstance3D" parent="WorkPoints" unique_id=1735317039]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.5000353, 0.15, -0.013854027)
-mesh = SubResource("SphereMesh_j07er")
-
-[node name="Dev3" type="MeshInstance3D" parent="WorkPoints" unique_id=824178556]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.0069446564, 0.15, 1.5139598)
-mesh = SubResource("SphereMesh_j07er")
-
-[node name="Dev4" type="MeshInstance3D" parent="WorkPoints" unique_id=1327534507]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.5208693, 0.15, 0.01392436)
-mesh = SubResource("SphereMesh_j07er")
-
 [node name="DevLabel" type="Label3D" parent="." unique_id=407215896]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
 billboard = 1
@@ -76,3 +60,19 @@ alpha_cut = 1
 
 [node name="NavigationObstacle3D" type="NavigationObstacle3D" parent="." unique_id=1024809809]
 radius = 0.9
+
+[node name="Dev" type="MeshInstance3D" parent="." unique_id=1569840112]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.15, -1.5)
+mesh = SubResource("SphereMesh_j07er")
+
+[node name="Dev2" type="MeshInstance3D" parent="." unique_id=1735317039]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.5000353, 0.15, -0.013854027)
+mesh = SubResource("SphereMesh_j07er")
+
+[node name="Dev3" type="MeshInstance3D" parent="." unique_id=824178556]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.0069446564, 0.15, 1.5139598)
+mesh = SubResource("SphereMesh_j07er")
+
+[node name="Dev4" type="MeshInstance3D" parent="." unique_id=1327534507]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.5208693, 0.15, 0.01392436)
+mesh = SubResource("SphereMesh_j07er")
