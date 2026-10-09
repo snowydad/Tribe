@@ -254,11 +254,17 @@ func withdraw_one_and_eat(st: Node) -> bool:
 		return false
 	if not st.has_method("withdraw_food"):
 		return false
-	var got: int = int(st.withdraw_food(1))
+	# склад хранит сытость; порция из storage.get_meal_portion() или 25
+	var portion: int = 25
+	if st.has_method("get_meal_portion"):
+		portion = int(st.get_meal_portion())
+	if st.has_method("set_active_work"):
+		st.set_active_work("withdraw")
+	var got: int = int(st.withdraw_food(portion))
 	if got <= 0:
 		return false
-	d.carried_item = "food"  # тип еды со склада; later item table
-	d.item_amount = got
+	d.carried_item = "food"
+	d.item_amount = 1
 	print("[Character] %s took food from storage (-%d)" % [d.character_name, got])
 	want_storage_meal = false
 	_cargo_drop_timer = 0.0

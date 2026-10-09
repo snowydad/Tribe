@@ -1,6 +1,6 @@
 # ==============================================================================
 # ФАЙЛ: src/characters/Character.gd
-# ОБНОВЛЕНО: 2026-10-07 — deliver: ALWAYS storage WP (never bush keep_pos)
+# ОБНОВЛЕНО: 2026-10-09 — part1 deposit: soft-arrive WP + stuck retarget (meal not touched)
 # НАЗНАЧЕНИЕ: Контроллер персонажа с зафиксированным инпутом, считыванием .ini
 #            (move_speed, work_speed), поддержкой RVO2 Avoidance для обхода
 #            NavigationObstacle3D, спуском по дуге при Context Drop,
@@ -44,6 +44,8 @@ var target_obstacle: Node3D = null
 
 var _current_target_pos: Vector3 = Vector3.ZERO
 var _work_timer: float = 0.0
+var _deliver_stuck_t: float = 0.0
+var _deliver_retarget_cd: float = 0.0
 var _dev_ui_timer: float = 0.0
 var _is_unloading_at_storage: bool = false
 
@@ -213,19 +215,31 @@ func _physics_process(delta: float) -> void:
 				_process_delivering_unload(delta)
 				move_and_slide()
 			else:
-				# unload только у WP склада (не у куста)
-				if target_storage and is_instance_valid(target_storage) and data and data.item_amount > 0 \
-						and is_on_floor() \
-						and _at_work_point(target_storage) \
-						and global_position.distance_to(target_storage.global_position) <= maxf(docking_distance * 2.0, 4.0) \
-						and WorkSite.can_accept(target_storage, self):
-					_is_unloading_at_storage = true
-					_work_timer = 0.0
+				# part1 deposit: у WP (мягко) → unload; stuck → новый free WP
+				if _try_begin_unload():
 					_stop_horizontal_movement(delta)
 					_rotate_towards_target(target_storage, delta)
 					_process_delivering_unload(delta)
 					move_and_slide()
 				else:
+					# stuck recovery (только deliver + cargo)
+					var spd: float = Vector2(velocity.x, velocity.z).length()
+					if spd < 0.08:
+						_deliver_stuck_t += delta
+					else:
+						_deliver_stuck_t = 0.0
+					_deliver_retarget_cd = maxf(_deliver_retarget_cd - delta, 0.0)
+					if _deliver_stuck_t >= 1.5 and _deliver_retarget_cd <= 0.0 \
+							and target_storage and is_instance_valid(target_storage):
+						# отпустить старый слот, взять ближайший free
+						if target_storage.has_method("release_work_point"):
+							target_storage.release_work_point(self)
+						_current_target_pos = _get_free_work_point_safe(target_storage)
+						if nav_agent:
+							nav_agent.target_position = _current_target_pos
+						_deliver_stuck_t = 0.0
+						_deliver_retarget_cd = 2.0
+						print("[Character] %s deliver retarget WP" % (data.character_name if data else "?"))
 					_process_nav_movement(delta)
 
 		State.EATING:
@@ -300,6 +314,10 @@ func _update_animation() -> void:
 		State.DELIVERING:
 			if _is_unloading_at_storage:
 				target_anim = "work"
+				if target_storage and is_instance_valid(target_storage):
+					var da: String = _work_anim_of(target_storage, "work")
+					if da != "":
+						target_anim = da
 			else:
 				target_anim = "walk"
 
@@ -496,26 +514,19 @@ func _on_movement_finished() -> void:
 		current_state = State.IDLE
 
 	elif current_state == State.DELIVERING:
-		# unload только у WP
-		if target_storage and is_instance_valid(target_storage) and _at_work_point(target_storage) \
-				and global_position.distance_to(target_storage.global_position) <= maxf(docking_distance * 2.0, 4.0):
-			if data and data.item_amount > 0 and WorkSite.can_accept(target_storage, self):
-				_is_unloading_at_storage = true
-				_work_timer = 0.0
-			else:
-				_is_unloading_at_storage = false
-				if not (data and data.item_amount > 0):
-					target_storage = null
-				current_state = State.IDLE
+		if _try_begin_unload():
+			pass
+		elif target_storage and is_instance_valid(target_storage) and data and data.item_amount > 0:
+			# path finished, но не у WP — новый free слот
+			if target_storage.has_method("release_work_point"):
+				target_storage.release_work_point(self)
+			_current_target_pos = _get_free_work_point_safe(target_storage)
+			if nav_agent:
+				nav_agent.target_position = _current_target_pos
 		else:
 			_is_unloading_at_storage = false
-			if target_storage and is_instance_valid(target_storage) and data and data.item_amount > 0:
-				_current_target_pos = _get_free_work_point_safe(target_storage)
-				if nav_agent:
-					nav_agent.target_position = _current_target_pos
-			else:
-				target_storage = null
-				current_state = State.IDLE
+			target_storage = null
+			current_state = State.IDLE
 
 func _stop_horizontal_movement(delta: float) -> void:
 	velocity.x = move_toward(velocity.x, 0.0, speed * delta * 10.0)
@@ -550,6 +561,39 @@ func _near_site(site: Node3D, mult: float = 1.5) -> bool:
 
 
 ## У work-point? Только _current_target_pos (WP), не центр site.
+
+## Достаточно близко к WP склада для unload (чуть мягче arrival, не «центр склада»)
+func _at_deliver_wp() -> bool:
+	if not target_storage or not is_instance_valid(target_storage):
+		return false
+	if not is_on_floor():
+		return false
+	# не у куста: должны быть рядом со складом
+	if global_position.distance_to(target_storage.global_position) > maxf(docking_distance * 3.0, 5.0):
+		return false
+	var pos_xz := Vector2(global_position.x, global_position.z)
+	var tgt_xz := Vector2(_current_target_pos.x, _current_target_pos.z)
+	# ~1.0–1.2 м до WP — path часто останавливается раньше 0.5
+	return pos_xz.distance_to(tgt_xz) <= maxf(arrival_distance, 0.5) * 2.5
+
+
+func _try_begin_unload() -> bool:
+	if not target_storage or not is_instance_valid(target_storage):
+		return false
+	if not (data and data.item_amount > 0):
+		return false
+	if not WorkSite.can_accept(target_storage, self):
+		return false
+	if not _at_deliver_wp():
+		return false
+	if target_storage.has_method("set_active_work"):
+		target_storage.set_active_work("deposit")
+	_is_unloading_at_storage = true
+	_work_timer = 0.0
+	_deliver_stuck_t = 0.0
+	return true
+
+
 func _at_work_point(_site: Node3D = null) -> bool:
 	var pos_xz := Vector2(global_position.x, global_position.z)
 	var tgt_xz := Vector2(_current_target_pos.x, _current_target_pos.z)
@@ -680,6 +724,9 @@ func _process_delivering_unload(delta: float) -> void:
 			task_manager.complete_current_task()
 		if target_storage.has_method("release_work_point"):
 			target_storage.release_work_point(self)
+		target_storage = null
+		move_intent = ""
+		_deliver_stuck_t = 0.0
 		# harvest готов → work; иначе wander-wait
 		if data and data.item_amount <= 0 and target_harvest and is_instance_valid(target_harvest):
 			if WorkSite.can_accept(target_harvest, self):
@@ -934,6 +981,8 @@ func start_delivering_to_storage(storage_node: Node3D) -> void:
 	_work_timer = 0.0
 	_is_unloading_at_storage = false
 	target_storage = storage_node
+	if target_storage.has_method("set_active_work"):
+		target_storage.set_active_work("deposit")
 
 	# ВСЕГДА WP склада (не keep_pos куста — иначе unload у berries)
 	_current_target_pos = _get_free_work_point_safe(storage_node)
