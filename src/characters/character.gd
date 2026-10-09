@@ -256,6 +256,22 @@ func _physics_process(delta: float) -> void:
 
 # --- УПРАВЛЕНИЕ АНИМАЦИЕЙ ---
 
+
+## work_anim с WorkSite-объекта (без WorkSite.get_anim — class_name cache)
+func _work_anim_of(site: Node, fallback: String = "work") -> String:
+	if site == null or not is_instance_valid(site):
+		return fallback
+	if site.has_method("get_work_anim"):
+		var a: String = str(site.call("get_work_anim"))
+		if a != "":
+			return a
+	if "work_anim" in site:
+		var a2: String = str(site.work_anim)
+		if a2 != "":
+			return a2
+	return fallback
+
+
 func _update_animation() -> void:
 	if not _anim_player or not is_instance_valid(_anim_player):
 		_anim_player = _find_animation_player(self)
@@ -273,7 +289,13 @@ func _update_animation() -> void:
 		State.EATING:
 			# клип "eat", иначе fallback "work"
 			target_anim = "eat" if _anim_player.has_animation("eat") else "work"
-		State.GATHERING, State.CLEARING:
+		State.GATHERING:
+			target_anim = "work"
+			if target_harvest and is_instance_valid(target_harvest):
+				var wa: String = _work_anim_of(target_harvest, "work")
+				if wa != "":
+					target_anim = wa
+		State.CLEARING:
 			target_anim = "work"
 		State.DELIVERING:
 			if _is_unloading_at_storage:
@@ -282,7 +304,10 @@ func _update_animation() -> void:
 				target_anim = "walk"
 
 	if not _anim_player.has_animation(target_anim):
-		return
+		if target_anim != "work" and _anim_player.has_animation("work"):
+			target_anim = "work"
+		else:
+			return
 	# die — один раз, не рестартить каждый кадр
 	if target_anim == "die":
 		if _death_anim_played:
@@ -1033,6 +1058,13 @@ func get_action_label() -> String:
 		State.EATING:
 			return "eat"
 		State.GATHERING:
+			if target_harvest and is_instance_valid(target_harvest):
+				var wa2: String = _work_anim_of(target_harvest, "")
+				if wa2 != "":
+					return wa2
+				var wt: String = WorkSite.get_type(target_harvest, "")
+				if wt != "":
+					return wt
 			return "gather"
 		State.CLEARING:
 			return "clear"

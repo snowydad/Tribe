@@ -52,6 +52,18 @@ static func get_skill(node: Node, fallback: String = "worker") -> String:
 	return fallback
 
 
+static func get_anim(node: Node, fallback: String = "work") -> String:
+	if node and node.has_method("get_work_anim"):
+		var a := str(node.call("get_work_anim"))
+		if a != "":
+			return a
+	if node and "work_anim" in node:
+		var a2 := str(node.work_anim)
+		if a2 != "":
+			return a2
+	return fallback
+
+
 static func get_type(node: Node, fallback: String = "") -> String:
 	if node and node.has_method("get_work_type"):
 		return str(node.call("get_work_type"))

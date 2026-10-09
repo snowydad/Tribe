@@ -1,3 +1,4 @@
+# ОБНОВЛЕНО: 2026-10-09 — work_anim; nutrition из items.ini (fallback berries)
 # ОБНОВЛЕНО: 2026-10-08 — WP: nearest free Marker3D (same as storage)
 # ==============================================================================
 # ОБНОВЛЕНО: 2026-10-06 — class_name BerriesSite; berry-логика только здесь
@@ -18,6 +19,7 @@ class_name BerriesSite
 @export_group("Work (from ini)")
 @export var work_type: String = "foraging"
 @export var skill: String = "forager"
+@export var work_anim: String = "gather_berries"
 @export var resource_type: String = "berry"
 @export var yield_amount: int = 1
 
@@ -50,26 +52,47 @@ func _ready() -> void:
 
 
 func _load_from_config() -> void:
-	if ConfigLoader and ConfigLoader.has_method("get_berries_value"):
+	if not ConfigLoader:
+		return
+
+	var nut_fallback: float = nutrition_value
+
+	# [work]
+	if ConfigLoader.has_method("get_berries_value"):
 		work_time = float(ConfigLoader.get_berries_value("work", "base_work_time", work_time))
 		work_type = str(ConfigLoader.get_berries_value("work", "work_type", work_type))
 		skill = str(ConfigLoader.get_berries_value("work", "skill", skill))
+		work_anim = str(ConfigLoader.get_berries_value("work", "work_anim", work_anim))
 		max_berries = int(ConfigLoader.get_berries_value("output", "max_amount", max_berries))
 		ripening_time = float(ConfigLoader.get_berries_value("output", "ripening_time", ripening_time))
 		resource_type = str(ConfigLoader.get_berries_value("output", "resource_type", resource_type))
 		yield_amount = int(ConfigLoader.get_berries_value("output", "yield_amount", yield_amount))
 		life_cycles_max = int(ConfigLoader.get_berries_value("output", "life_cycles_max", life_cycles_max))
-		nutrition_value = float(ConfigLoader.get_berries_value("nutrition", "nutrition_value", nutrition_value))
-	elif ConfigLoader and ConfigLoader.has_method("get_config_value"):
+		nut_fallback = float(ConfigLoader.get_berries_value("nutrition", "nutrition_value", nutrition_value))
+	elif ConfigLoader.has_method("get_config_value"):
 		work_time = float(ConfigLoader.get_config_value("berries", "work", "base_work_time", work_time))
 		work_type = str(ConfigLoader.get_config_value("berries", "work", "work_type", work_type))
 		skill = str(ConfigLoader.get_config_value("berries", "work", "skill", skill))
+		work_anim = str(ConfigLoader.get_config_value("berries", "work", "work_anim", work_anim))
 		max_berries = int(ConfigLoader.get_config_value("berries", "output", "max_amount", max_berries))
 		ripening_time = float(ConfigLoader.get_config_value("berries", "output", "ripening_time", ripening_time))
 		resource_type = str(ConfigLoader.get_config_value("berries", "output", "resource_type", resource_type))
 		yield_amount = int(ConfigLoader.get_config_value("berries", "output", "yield_amount", yield_amount))
 		life_cycles_max = int(ConfigLoader.get_config_value("berries", "output", "life_cycles_max", life_cycles_max))
-		nutrition_value = float(ConfigLoader.get_config_value("berries", "nutrition", "nutrition_value", nutrition_value))
+		nut_fallback = float(ConfigLoader.get_config_value("berries", "nutrition", "nutrition_value", nutrition_value))
+	else:
+		return
+
+	# сытость: items.ini → resource_type; иначе berries [nutrition]
+	if ConfigLoader.has_method("get_item_nutrition"):
+		nutrition_value = float(ConfigLoader.get_item_nutrition(resource_type, nut_fallback))
+	else:
+		nutrition_value = nut_fallback
+
+	print("[Berries] Config: work=%s anim=%s skill=%s time=%.1f item=%s nut=%.0f cycles=%d" % [
+		work_type, work_anim, skill, work_time, resource_type, nutrition_value, life_cycles_max
+	])
+
 
 
 func _process(delta: float) -> void:
@@ -159,14 +182,23 @@ func get_work_type() -> String:
 	return work_type
 
 
+func get_work_anim() -> String:
+	return work_anim
+
+
 func do_work(_worker: Node = null) -> Dictionary:
 	if not harvest_berry():
 		return {"ok": false, "reason": "not_ready" if not is_dead else "dead"}
+	var nut: float = nutrition_value
+	if ConfigLoader and ConfigLoader.has_method("get_item_nutrition"):
+		nut = float(ConfigLoader.get_item_nutrition(resource_type, nutrition_value))
 	return {
 		"ok": true,
 		"give": {"item": resource_type, "amount": yield_amount},
 		"xp_skill": skill,
-		"nutrition": nutrition_value,
+		"work_type": work_type,
+		"work_anim": work_anim,
+		"nutrition": nut,
 	}
 
 
@@ -241,8 +273,8 @@ func _update_dev_ui() -> void:
 		var progress: float = clampf((_ripen_timer / maxf(ripening_time, 0.001)) * 100.0, 0.0, 100.0)
 		dev_label.text = "Berries: 0/%d\n[Ripening: %.0f%%]\nCycles: %s" % [max_berries, progress, life]
 	else:
-		dev_label.text = "Berries: %d/%d (Nutr: +%.0f)\nCycles: %s\nWork: %s / %s" % [
-			current_berries, max_berries, nutrition_value, life, work_type, skill
+		dev_label.text = "Berries: %d/%d (Nutr: +%.0f)\nCycles: %s\n%s | %s\n%s" % [
+			current_berries, max_berries, nutrition_value, life, work_type, skill, work_anim
 		]
 
 
