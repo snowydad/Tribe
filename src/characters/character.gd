@@ -1,6 +1,6 @@
 # ==============================================================================
 # character.gd — FSM, nav, work, drop. Matrix → CharacterDecision.
-# ОБНОВЛЕНО: 2026-10-09 — path_desired = arrival_distance only (no max 0.4)
+# ОБНОВЛЕНО: 2026-10-10 — peer push: walker shoves idle
 # ==============================================================================
 extends CharacterBody3D
 
@@ -39,6 +39,21 @@ var target_obstacle: Node3D = null
 
 var _current_target_pos: Vector3 = Vector3.ZERO
 var _work_timer: float = 0.0
+## stuck: step aside → repath same goal A
+var stuck_time: float = 2.0
+var stuck_max_cycles: int = 3
+var stuck_side_distance: float = 1.0
+## толчок: идущий → стоящему
+var push_radius: float = 0.7
+var push_strength: float = 2.5
+var push_min_speed: float = 0.15  # я «иду» если быстрее
+var _stuck_t: float = 0.0
+var _stuck_cycles: int = 0
+var _nav_side_step: bool = false
+var _path_goal_A: Vector3 = Vector3.ZERO
+var _last_pos_xz: Vector2 = Vector2.ZERO
+var _stuck_cd: float = 0.0
+var _pushed_t: float = 0.0
 var _dev_ui_timer: float = 0.0
 var _is_unloading_at_storage: bool = false
 
@@ -78,6 +93,7 @@ func _ready() -> void:
 	if decision == null:
 		decision = CharacterDecisionScript.new()
 	decision.setup(self)
+	add_to_group("character")
 
 	# Чтение параметров скорости и навигации из конфигурационных файлов (.ini)
 	if ConfigLoader:
@@ -87,6 +103,11 @@ func _ready() -> void:
 			eat_speed = float(ConfigLoader.get_character_value("base_stats", "eat_speed", 1.0))
 			arrival_distance = float(ConfigLoader.get_character_value("navigation", "arrival_distance", arrival_distance))
 			docking_distance = float(ConfigLoader.get_character_value("navigation", "docking_distance", docking_distance))
+			stuck_time = float(ConfigLoader.get_character_value("navigation", "stuck_time", stuck_time))
+			stuck_max_cycles = int(ConfigLoader.get_character_value("navigation", "stuck_max_cycles", stuck_max_cycles))
+			stuck_side_distance = float(ConfigLoader.get_character_value("navigation", "stuck_side_distance", stuck_side_distance))
+			push_radius = float(ConfigLoader.get_character_value("navigation", "push_radius", push_radius))
+			push_strength = float(ConfigLoader.get_character_value("navigation", "push_strength", push_strength))
 			decision.cargo_drop_delay = float(ConfigLoader.get_character_value("base_stats", "cargo_drop_delay", decision.cargo_drop_delay))
 			drop_think_time = float(ConfigLoader.get_character_value("base_stats", "drop_think_time", drop_think_time))
 			wander_radius_min = float(ConfigLoader.get_character_value("base_stats", "wander_radius_min", wander_radius_min))
@@ -97,6 +118,11 @@ func _ready() -> void:
 			eat_speed = float(ConfigLoader.get_config_value("character", "base_stats", "eat_speed", 1.0))
 			arrival_distance = float(ConfigLoader.get_config_value("character", "navigation", "arrival_distance", arrival_distance))
 			docking_distance = float(ConfigLoader.get_config_value("character", "navigation", "docking_distance", docking_distance))
+			stuck_time = float(ConfigLoader.get_config_value("character", "navigation", "stuck_time", stuck_time))
+			stuck_max_cycles = int(ConfigLoader.get_config_value("character", "navigation", "stuck_max_cycles", stuck_max_cycles))
+			stuck_side_distance = float(ConfigLoader.get_config_value("character", "navigation", "stuck_side_distance", stuck_side_distance))
+			push_radius = float(ConfigLoader.get_config_value("character", "navigation", "push_radius", push_radius))
+			push_strength = float(ConfigLoader.get_config_value("character", "navigation", "push_strength", push_strength))
 			decision.cargo_drop_delay = float(ConfigLoader.get_config_value("character", "base_stats", "cargo_drop_delay", decision.cargo_drop_delay))
 			drop_think_time = float(ConfigLoader.get_config_value("character", "base_stats", "drop_think_time", drop_think_time))
 			wander_radius_min = float(ConfigLoader.get_config_value("character", "base_stats", "wander_radius_min", wander_radius_min))
@@ -119,7 +145,7 @@ func _ready() -> void:
 func _physics_process(delta: float) -> void:
 	if data:
 		data.update_needs(delta, _needs_activity())
-		# Смерть: health <= 0
+	# Смерть: health <= 0
 	if data and data.health <= 0.0:
 		if current_state != State.DEAD:
 			_die()
@@ -148,7 +174,13 @@ func _physics_process(delta: float) -> void:
 	# 3. Машина состояний (FSM)
 	match current_state:
 		State.IDLE:
-			_stop_horizontal_movement(delta)
+			if _pushed_t > 0.0:
+				_pushed_t -= delta
+				# лёгкое трение, не мгновенный стоп — чтобы толчок был виден
+				velocity.x = move_toward(velocity.x, 0.0, speed * delta * 2.0)
+				velocity.z = move_toward(velocity.z, 0.0, speed * delta * 2.0)
+			else:
+				_stop_horizontal_movement(delta)
 			if _drop_think_left >= 0.0:
 				_drop_think_left -= delta
 				if _drop_think_left <= 0.0:
@@ -238,6 +270,7 @@ func _physics_process(delta: float) -> void:
 				_process_clearing(delta)
 				move_and_slide()
 
+	_push_peers(delta)
 	_update_animation()
 	# DevLabel не каждый кадр — меньше аллокаций строк (важно при нескольких персах)
 	_dev_ui_timer += delta
@@ -376,21 +409,176 @@ func _process_arc_drop_movement(delta: float) -> void:
 		velocity.x = 0.0
 		velocity.z = 0.0
 
-## Перемещение по навигационной сетке с поддержкой RVO Avoidance (обход NavigationObstacle3D)
+
+## Старт path к цели A (WP)
+func _nav_go_to(goal: Vector3) -> void:
+	_path_goal_A = goal
+	_current_target_pos = goal
+	_nav_side_step = false
+	_stuck_t = 0.0
+	_stuck_cycles = 0
+	_last_pos_xz = Vector2(global_position.x, global_position.z)
+	if nav_agent:
+		nav_agent.target_position = goal
+
+
+## Упёрся: шаг в сторону (от соседа / ⊥ к A), на mesh
+func _nav_step_aside() -> void:
+	if not nav_agent:
+		return
+	if not _nav_side_step:
+		_path_goal_A = _current_target_pos
+	var side: Vector3 = _side_step_dir()
+	var raw: Vector3 = global_position + side * stuck_side_distance
+	var map_rid: RID = nav_agent.get_navigation_map()
+	var b: Vector3 = NavigationServer3D.map_get_closest_point(map_rid, raw)
+	_nav_side_step = true
+	_stuck_t = 0.0
+	_stuck_cd = stuck_time  # пауза, чтобы не мельтешить
+	_current_target_pos = b
+	nav_agent.target_position = b
+
+
+## Направление side: от ближайшего перса, иначе ⊥ к A (L/R по cycle)
+func _side_step_dir() -> Vector3:
+	var away := _away_from_nearest_peer()
+	if away.length_squared() > 0.01:
+		return away.normalized()
+	var to_a := _path_goal_A - global_position
+	to_a.y = 0.0
+	if to_a.length_squared() > 0.01:
+		var f := to_a.normalized()
+		var side := Vector3(-f.z, 0.0, f.x)
+		if (_stuck_cycles % 2) == 1:
+			side = -side
+		return side
+	return Vector3(1.0, 0.0, 0.0)
+
+
+func _away_from_nearest_peer() -> Vector3:
+	var tree := get_tree()
+	if tree == null:
+		return Vector3.ZERO
+	var best_d := 2.5  # только «в упор»
+	var best := Vector3.ZERO
+	for n in tree.get_nodes_in_group("character"):
+		if n == self or not (n is Node3D) or not is_instance_valid(n):
+			continue
+		var o: Node3D = n as Node3D
+		var d: float = global_position.distance_to(o.global_position)
+		if d < best_d and d > 0.01:
+			best_d = d
+			var v: Vector3 = global_position - o.global_position
+			v.y = 0.0
+			best = v
+	return best
+
+
+## После шага в сторону — новый path к той же A
+func _nav_repath_A() -> void:
+	_nav_side_step = false
+	_stuck_t = 0.0
+	_stuck_cd = stuck_time
+	_stuck_cycles += 1
+	if _stuck_cycles >= stuck_max_cycles:
+		_on_movement_finished()
+		return
+	_current_target_pos = _path_goal_A
+	if nav_agent:
+		nav_agent.target_position = _path_goal_A
+
+
+
+## Идущий толкает стоящего / более медленного
+func _push_peers(delta: float) -> void:
+	if current_state == State.DEAD or current_state == State.CARRIED or is_being_dragged:
+		return
+	if not is_on_floor():
+		return
+	var my_spd := Vector2(velocity.x, velocity.z).length()
+	if my_spd < push_min_speed:
+		return  # стою — не толкаю
+	var tree := get_tree()
+	if tree == null:
+		return
+	for n in tree.get_nodes_in_group("character"):
+		if n == self or not is_instance_valid(n):
+			continue
+		if not (n is CharacterBody3D):
+			continue
+		var other: CharacterBody3D = n as CharacterBody3D
+		if "current_state" in other and other.current_state == State.DEAD:
+			continue
+		if "is_being_dragged" in other and other.is_being_dragged:
+			continue
+		var offset: Vector3 = other.global_position - global_position
+		offset.y = 0.0
+		var dist: float = offset.length()
+		if dist > push_radius or dist < 0.001:
+			continue
+		var other_spd := Vector2(other.velocity.x, other.velocity.z).length()
+		# толкаем того, кто медленнее / стоит
+		if other_spd >= my_spd * 0.9:
+			continue
+		var dir: Vector3 = offset / dist
+		# импульс сильнее, чем ближе
+		var w: float = 1.0 - (dist / push_radius)
+		var impulse: float = push_strength * w * my_spd * delta * 10.0
+		other.velocity.x += dir.x * impulse
+		other.velocity.z += dir.z * impulse
+		other.set("_pushed_t", 0.35)
+		other.move_and_slide()
+		velocity.x -= dir.x * impulse * 0.15
+		velocity.z -= dir.z * impulse * 0.15
+
+## Перемещение по navmesh
 func _process_nav_movement(delta: float) -> void:
-	if not nav_agent or nav_agent.is_navigation_finished():
+	if not nav_agent:
+		_on_movement_finished()
+		return
+
+	var current_pos = global_position
+	var pos_xz := Vector2(current_pos.x, current_pos.z)
+	var dist_to_final = pos_xz.distance_to(Vector2(_current_target_pos.x, _current_target_pos.z))
+
+	# дошли до текущей цели
+	if nav_agent.is_navigation_finished() or dist_to_final <= arrival_distance:
 		_stop_horizontal_movement(delta)
+		if _nav_side_step:
+			# был шаг в сторону → repath к A
+			_nav_repath_A()
+			move_and_slide()
+			return
+		_stuck_t = 0.0
+		_stuck_cycles = 0
 		_on_movement_finished()
 		move_and_slide()
 		return
 
-	var current_pos = global_position
+	# stuck detect (с паузой после side/repath — меньше мельтешения)
+	_stuck_cd = maxf(_stuck_cd - delta, 0.0)
+	var hvel := Vector2(velocity.x, velocity.z).length()
+	var moved := pos_xz.distance_to(_last_pos_xz)
+	_last_pos_xz = pos_xz
+	if _stuck_cd <= 0.0 and hvel < 0.05 and moved < 0.02:
+		_stuck_t += delta
+		if _stuck_t >= stuck_time:
+			_stuck_t = 0.0
+			if _nav_side_step:
+				# застрял и на side — сразу repath A
+				_nav_repath_A()
+			else:
+				_nav_step_aside()
+			move_and_slide()
+			return
+	else:
+		_stuck_t = 0.0
+
 	var next_path_pos = nav_agent.get_next_path_position()
 	var dir = (next_path_pos - current_pos)
 	dir.y = 0.0
-	var dist_to_final = Vector2(current_pos.x, current_pos.z).distance_to(Vector2(_current_target_pos.x, _current_target_pos.z))
 
-	if dist_to_final > arrival_distance and dir.length_squared() > 0.001:
+	if dir.length_squared() > 0.001:
 		var move_dir = dir.normalized()
 		var move_spd: float = speed * _energy_mult()
 		var target_vel_x = move_dir.x * move_spd
@@ -401,17 +589,16 @@ func _process_nav_movement(delta: float) -> void:
 			target_vel_x *= cap_factor
 			target_vel_z *= cap_factor
 		var intended_velocity = Vector3(target_vel_x, velocity.y, target_vel_z)
+		var target_angle = atan2(-move_dir.x, -move_dir.z)
 		if nav_agent.avoidance_enabled:
 			nav_agent.set_velocity(intended_velocity)
 		else:
 			velocity.x = intended_velocity.x
 			velocity.z = intended_velocity.z
-			var target_angle = atan2(-move_dir.x, -move_dir.z)
 			rotation.y = lerp_angle(rotation.y, target_angle, rotation_speed * delta)
 			move_and_slide()
 	else:
 		_stop_horizontal_movement(delta)
-		_on_movement_finished()
 		move_and_slide()
 
 ## Колбэк RVO Avoidance от навигационного сервера Godot
@@ -422,7 +609,7 @@ func _on_safe_velocity_computed(safe_velocity: Vector3) -> void:
 		velocity.x = safe_velocity.x
 		velocity.z = safe_velocity.z
 		var vel_2d = Vector2(safe_velocity.x, safe_velocity.z)
-		if vel_2d.length_squared() > 0.01:
+		if vel_2d.length_squared() > 0.05:
 			var target_angle = atan2(-vel_2d.x, -vel_2d.y)
 			rotation.y = lerp_angle(rotation.y, target_angle, rotation_speed * get_physics_process_delta_time())
 		move_and_slide()
@@ -498,8 +685,7 @@ func _on_movement_finished() -> void:
 				_is_unloading_at_storage = true
 				_work_timer = 0.0
 			elif WorkSite.can_accept(target_storage, self):
-				if nav_agent:
-					nav_agent.target_position = _current_target_pos
+				_nav_go_to(_current_target_pos)
 			else:
 				decision.handle_full_storage_with_cargo()
 		else:
@@ -779,8 +965,7 @@ func on_context_drop(site: Node3D, land_pos: Vector3) -> void:
 			_begin_drop_think()
 			return
 	current_state = State.MOVING
-	if nav_agent:
-		nav_agent.target_position = dest
+	_nav_go_to(dest)
 
 
 ## Движение без set_user_override — очередь (persistent GATHER и т.д.) жива
@@ -893,8 +1078,7 @@ func start_harvesting(site: Node3D) -> void:
 	else:
 		move_intent = "work"
 		current_state = State.MOVING
-		if nav_agent:
-			nav_agent.target_position = _current_target_pos
+		_nav_go_to(_current_target_pos)
 
 
 func start_delivering_to_storage(storage_node: Node3D) -> void:
@@ -939,10 +1123,8 @@ func start_delivering_to_storage(storage_node: Node3D) -> void:
 	elif on_storage_wp and not can_work:
 		current_state = State.IDLE
 	else:
-		# идём к WP склада
 		current_state = State.DELIVERING
-		if nav_agent:
-			nav_agent.target_position = _current_target_pos
+		_nav_go_to(_current_target_pos)
 
 
 func _go_to_site_wp(site: Node3D) -> void:
@@ -950,10 +1132,8 @@ func _go_to_site_wp(site: Node3D) -> void:
 	is_being_dragged = false
 	_is_unloading_at_storage = false
 	_awaiting_drop_decide = false
-	_current_target_pos = _get_free_work_point_safe(site)
+	_nav_go_to(_get_free_work_point_safe(site))
 	current_state = State.MOVING
-	if nav_agent:
-		nav_agent.target_position = _current_target_pos
 
 
 func start_clearing_obstacle(obstacle_node: Node3D) -> void:
