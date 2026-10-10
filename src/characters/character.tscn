@@ -13,7 +13,7 @@ height = 0.3
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_djufw"]
 margin = 0.4
-radius = 0.38134766
+radius = 0.3
 height = 1.5893555
 
 [sub_resource type="SystemFont" id="SystemFont_o43y5"]
@@ -135,11 +135,14 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.0015716553, 0.023803711, -0
 shape = SubResource("CapsuleShape3D_djufw")
 
 [node name="NavigationAgent3D" type="NavigationAgent3D" parent="." unique_id=473793849]
+path_desired_distance = 0.4
+target_desired_distance = 0.4
 avoidance_enabled = true
 height = 1.5
 radius = 0.4
 time_horizon_agents = 2.0
 time_horizon_obstacles = 2.0
+debug_enabled = true
 
 [node name="DevLabel" type="Label3D" parent="." unique_id=1966805573]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)

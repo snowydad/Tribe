@@ -1,11 +1,6 @@
 # ==============================================================================
-# ФАЙЛ: src/characters/Character.gd
-# ОБНОВЛЕНО: 2026-10-09 — part1 deposit: soft-arrive WP + stuck retarget (meal not touched)
-# НАЗНАЧЕНИЕ: Контроллер персонажа с зафиксированным инпутом, считыванием .ini
-#            (move_speed, work_speed), поддержкой RVO2 Avoidance для обхода
-#            NavigationObstacle3D, спуском по дуге при Context Drop,
-#            непрерывным рабочим циклом фуражира, интеграцией TaskManager и анимациями.
-#            Матрица → CharacterDecision; work только у WorkPoint (_at_work_point).
+# character.gd — FSM, nav, work, drop. Matrix → CharacterDecision.
+# ОБНОВЛЕНО: 2026-10-09 — path_desired = arrival_distance only (no max 0.4)
 # ==============================================================================
 extends CharacterBody3D
 
@@ -44,12 +39,10 @@ var target_obstacle: Node3D = null
 
 var _current_target_pos: Vector3 = Vector3.ZERO
 var _work_timer: float = 0.0
-var _deliver_stuck_t: float = 0.0
-var _deliver_retarget_cd: float = 0.0
 var _dev_ui_timer: float = 0.0
 var _is_unloading_at_storage: bool = false
 
-## Решения (матрица hunger/склад/еда) — cut #1
+## Matrix decisions
 var decision = CharacterDecisionScript.new()
 
 var drop_site: Node3D = null
@@ -112,7 +105,7 @@ func _ready() -> void:
 	# Настройка агента и подключение RVO2 Avoidance
 	if nav_agent:
 		nav_agent.target_desired_distance = arrival_distance
-		nav_agent.path_desired_distance = max(arrival_distance, 0.4)
+		nav_agent.path_desired_distance = arrival_distance
 		nav_agent.avoidance_enabled = true
 		if not nav_agent.velocity_computed.is_connected(_on_safe_velocity_computed):
 			nav_agent.velocity_computed.connect(_on_safe_velocity_computed)
@@ -191,21 +184,12 @@ func _physics_process(delta: float) -> void:
 				move_and_slide()
 
 		State.DELIVERING:
-			# без груза — не deliver; сброс site
 			if not (data and data.item_amount > 0) and not _is_unloading_at_storage:
 				_is_unloading_at_storage = false
 				target_storage = null
 				move_intent = ""
 				current_state = State.IDLE
 				move_and_slide()
-			# can_accept = false (полн) — не unload
-			elif target_storage and is_instance_valid(target_storage) and data and data.item_amount > 0 \
-					and not WorkSite.can_accept(target_storage, self):
-				if decision.handle_full_storage_with_cargo():
-					move_and_slide()
-				else:
-					current_state = State.IDLE
-					move_and_slide()
 			elif not is_on_floor():
 				_process_arc_drop_movement(delta)
 				move_and_slide()
@@ -215,31 +199,24 @@ func _physics_process(delta: float) -> void:
 				_process_delivering_unload(delta)
 				move_and_slide()
 			else:
-				# part1 deposit: у WP (мягко) → unload; stuck → новый free WP
-				if _try_begin_unload():
+				if target_storage and is_instance_valid(target_storage) and target_storage.has_method("set_active_work"):
+					target_storage.set_active_work("deposit")
+				if target_storage and is_instance_valid(target_storage) and data and data.item_amount > 0 \
+						and _at_work_point(target_storage) and WorkSite.can_accept(target_storage, self):
+					_is_unloading_at_storage = true
+					_work_timer = 0.0
 					_stop_horizontal_movement(delta)
 					_rotate_towards_target(target_storage, delta)
 					_process_delivering_unload(delta)
 					move_and_slide()
-				else:
-					# stuck recovery (только deliver + cargo)
-					var spd: float = Vector2(velocity.x, velocity.z).length()
-					if spd < 0.08:
-						_deliver_stuck_t += delta
+				elif target_storage and is_instance_valid(target_storage) and data and data.item_amount > 0 \
+						and not WorkSite.can_accept(target_storage, self):
+					if decision.handle_full_storage_with_cargo():
+						move_and_slide()
 					else:
-						_deliver_stuck_t = 0.0
-					_deliver_retarget_cd = maxf(_deliver_retarget_cd - delta, 0.0)
-					if _deliver_stuck_t >= 1.5 and _deliver_retarget_cd <= 0.0 \
-							and target_storage and is_instance_valid(target_storage):
-						# отпустить старый слот, взять ближайший free
-						if target_storage.has_method("release_work_point"):
-							target_storage.release_work_point(self)
-						_current_target_pos = _get_free_work_point_safe(target_storage)
-						if nav_agent:
-							nav_agent.target_position = _current_target_pos
-						_deliver_stuck_t = 0.0
-						_deliver_retarget_cd = 2.0
-						print("[Character] %s deliver retarget WP" % (data.character_name if data else "?"))
+						current_state = State.IDLE
+						move_and_slide()
+				else:
 					_process_nav_movement(delta)
 
 		State.EATING:
@@ -271,7 +248,7 @@ func _physics_process(delta: float) -> void:
 # --- УПРАВЛЕНИЕ АНИМАЦИЕЙ ---
 
 
-## work_anim с WorkSite-объекта (без WorkSite.get_anim — class_name cache)
+## work_anim from site
 func _work_anim_of(site: Node, fallback: String = "work") -> String:
 	if site == null or not is_instance_valid(site):
 		return fallback
@@ -475,7 +452,7 @@ func _on_movement_finished() -> void:
 				decision.want_storage_meal = false
 				current_state = State.IDLE
 				return
-			# ещё далеко — дойти (1 раз retarget)
+			# still far — re-path meal
 			decision.go_eat_from_storage()
 			return
 
@@ -514,15 +491,17 @@ func _on_movement_finished() -> void:
 		current_state = State.IDLE
 
 	elif current_state == State.DELIVERING:
-		if _try_begin_unload():
-			pass
-		elif target_storage and is_instance_valid(target_storage) and data and data.item_amount > 0:
-			# path finished, но не у WP — новый free слот
-			if target_storage.has_method("release_work_point"):
-				target_storage.release_work_point(self)
-			_current_target_pos = _get_free_work_point_safe(target_storage)
-			if nav_agent:
-				nav_agent.target_position = _current_target_pos
+		if target_storage and is_instance_valid(target_storage) and target_storage.has_method("set_active_work"):
+			target_storage.set_active_work("deposit")
+		if target_storage and is_instance_valid(target_storage) and data and data.item_amount > 0:
+			if _at_work_point(target_storage) and WorkSite.can_accept(target_storage, self):
+				_is_unloading_at_storage = true
+				_work_timer = 0.0
+			elif WorkSite.can_accept(target_storage, self):
+				if nav_agent:
+					nav_agent.target_position = _current_target_pos
+			else:
+				decision.handle_full_storage_with_cargo()
 		else:
 			_is_unloading_at_storage = false
 			target_storage = null
@@ -553,51 +532,16 @@ func _energy_mult() -> float:
 	return 1.0
 
 
-## Близко к объекту (для склада/куста: arrive soft, без walk-loop)
-func _near_site(site: Node3D, mult: float = 1.5) -> bool:
+func _near_site(site: Node3D, mult: float = 1.0) -> bool:
 	if not site or not is_instance_valid(site):
 		return false
-	return global_position.distance_to(site.global_position) <= maxf(docking_distance * mult, 2.5)
-
-
-## У work-point? Только _current_target_pos (WP), не центр site.
-
-## Достаточно близко к WP склада для unload (чуть мягче arrival, не «центр склада»)
-func _at_deliver_wp() -> bool:
-	if not target_storage or not is_instance_valid(target_storage):
-		return false
-	if not is_on_floor():
-		return false
-	# не у куста: должны быть рядом со складом
-	if global_position.distance_to(target_storage.global_position) > maxf(docking_distance * 3.0, 5.0):
-		return false
-	var pos_xz := Vector2(global_position.x, global_position.z)
-	var tgt_xz := Vector2(_current_target_pos.x, _current_target_pos.z)
-	# ~1.0–1.2 м до WP — path часто останавливается раньше 0.5
-	return pos_xz.distance_to(tgt_xz) <= maxf(arrival_distance, 0.5) * 2.5
-
-
-func _try_begin_unload() -> bool:
-	if not target_storage or not is_instance_valid(target_storage):
-		return false
-	if not (data and data.item_amount > 0):
-		return false
-	if not WorkSite.can_accept(target_storage, self):
-		return false
-	if not _at_deliver_wp():
-		return false
-	if target_storage.has_method("set_active_work"):
-		target_storage.set_active_work("deposit")
-	_is_unloading_at_storage = true
-	_work_timer = 0.0
-	_deliver_stuck_t = 0.0
-	return true
+	return global_position.distance_to(site.global_position) <= docking_distance * mult
 
 
 func _at_work_point(_site: Node3D = null) -> bool:
 	var pos_xz := Vector2(global_position.x, global_position.z)
 	var tgt_xz := Vector2(_current_target_pos.x, _current_target_pos.z)
-	return pos_xz.distance_to(tgt_xz) <= maxf(arrival_distance, 0.5)
+	return pos_xz.distance_to(tgt_xz) <= arrival_distance
 
 
 # --- РАБОЧИЕ ПРОЦЕССЫ ---
@@ -643,8 +587,6 @@ func _process_gathering(delta: float) -> void:
 		elif data.has_method("add_skill_exp"):
 			data.add_skill_exp(xp_skill, xp_per_cycle)
 
-		print("[Character] Work done at site: +%d %s" % [data.item_amount, data.carried_item])
-		# A / B / E / F / G
 		decision.resolve_cargo_action()
 
 func start_eating() -> void:
@@ -719,14 +661,12 @@ func _process_delivering_unload(delta: float) -> void:
 		elif data.has_method("add_skill_exp"):
 			data.add_skill_exp(xp_skill, xp_per_cycle)
 		var take = result.get("take", {})
-		print("[Character] Deposited %s x%d" % [str(take.get("item", "?")), int(take.get("amount", 0))])
 		if task_manager:
 			task_manager.complete_current_task()
 		if target_storage.has_method("release_work_point"):
 			target_storage.release_work_point(self)
 		target_storage = null
 		move_intent = ""
-		_deliver_stuck_t = 0.0
 		# harvest готов → work; иначе wander-wait
 		if data and data.item_amount <= 0 and target_harvest and is_instance_valid(target_harvest):
 			if WorkSite.can_accept(target_harvest, self):
@@ -835,7 +775,7 @@ func on_context_drop(site: Node3D, land_pos: Vector3) -> void:
 	if is_on_floor():
 		var pos_xz := Vector2(global_position.x, global_position.z)
 		var dst_xz := Vector2(dest.x, dest.z)
-		if pos_xz.distance_to(dst_xz) <= maxf(arrival_distance, 0.5):
+		if pos_xz.distance_to(dst_xz) <= arrival_distance:
 			_begin_drop_think()
 			return
 	current_state = State.MOVING
@@ -877,7 +817,6 @@ func wander_nearby(radius_min: float = -1.0, radius_max: float = -1.0) -> void:
 	var a: float = randf() * TAU
 	var dest: Vector3 = global_position + Vector3(cos(a) * r, 0.0, sin(a) * r)
 	dest.y = global_position.y
-	print("[Character] %s wander ~%.0fm" % [data.character_name if data else "?", r])
 	_soft_move_to(dest)
 
 
@@ -924,7 +863,7 @@ func start_harvesting(site: Node3D) -> void:
 	var d_wp: float = Vector2(global_position.x, global_position.z).distance_to(Vector2(keep_pos.x, keep_pos.z))
 	var d_site: float = global_position.distance_to(site.global_position)
 	var already_on_wp: bool = is_on_floor() \
-		and d_wp <= maxf(arrival_distance, 0.5) * 2.0 \
+		and d_wp <= arrival_distance \
 		and d_site <= maxf(docking_distance * 2.0, 4.0)
 
 	if already_on_wp:
