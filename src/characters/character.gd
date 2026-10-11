@@ -1,6 +1,6 @@
 # ==============================================================================
 # character.gd — FSM, nav, work, drop. Matrix → CharacterDecision.
-# ОБНОВЛЕНО: 2026-10-11 — waypoint path follow + skip stuck + hard nudge
+# ОБНОВЛЕНО: 2026-10-11 — keep agent path alive for debug (get_next each frame)
 # ==============================================================================
 extends CharacterBody3D
 
@@ -136,6 +136,8 @@ func _ready() -> void:
 		nav_agent.target_desired_distance = arrival_distance
 		nav_agent.path_desired_distance = arrival_distance
 		nav_agent.avoidance_enabled = true
+		if "debug_enabled" in nav_agent:
+			nav_agent.debug_enabled = true
 		if not nav_agent.velocity_computed.is_connected(_on_safe_velocity_computed):
 			nav_agent.velocity_computed.connect(_on_safe_velocity_computed)
 
@@ -578,6 +580,8 @@ func _nav_refresh_path() -> void:
 	if not nav_agent:
 		return
 	nav_agent.target_position = _current_target_pos
+	# обязательно дергать next — иначе path/debug «мертвый»
+	var _poke: Vector3 = nav_agent.get_next_path_position()
 	_nav_path = nav_agent.get_current_navigation_path()
 	_nav_path_i = 0
 	if _nav_path.is_empty():
@@ -640,6 +644,10 @@ func _process_nav_movement(delta: float) -> void:
 	var pos_xz := Vector2(current_pos.x, current_pos.z)
 	var goal: Vector3 = _current_target_pos
 	var dist_to_final: float = pos_xz.distance_to(Vector2(goal.x, goal.z))
+
+	# agent path + debug: target + get_next каждый кадр
+	nav_agent.target_position = goal
+	var _agent_next: Vector3 = nav_agent.get_next_path_position()
 
 	if dist_to_final <= arrival_distance:
 		_stop_horizontal_movement(delta)
@@ -709,8 +717,13 @@ func _process_nav_movement(delta: float) -> void:
 	else:
 		_stuck_t = 0.0
 
-	# refresh empty path
-	if _nav_path.is_empty():
+	# sync path from agent (debug + follow)
+	var agent_path: PackedVector3Array = nav_agent.get_current_navigation_path()
+	if not agent_path.is_empty():
+		if _nav_path.is_empty() or agent_path.size() != _nav_path.size():
+			_nav_path = agent_path
+			_nav_path_i = mini(_nav_path_i, maxi(_nav_path.size() - 1, 0))
+	elif _nav_path.is_empty():
 		_nav_refresh_path()
 
 	# target waypoint
