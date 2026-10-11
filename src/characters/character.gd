@@ -1,6 +1,6 @@
 # ==============================================================================
 # character.gd — FSM, nav, work, drop. Matrix → CharacterDecision.
-# ОБНОВЛЕНО: 2026-10-11 — smooth facing: angle deadzone + soft lerp
+# ОБНОВЛЕНО: 2026-10-11 — waypoint path follow + skip stuck + hard nudge
 # ==============================================================================
 extends CharacterBody3D
 
@@ -53,6 +53,9 @@ var _nav_side_step: bool = false
 var _path_goal_A: Vector3 = Vector3.ZERO
 var _last_pos_xz: Vector2 = Vector2.ZERO
 var _stuck_cd: float = 0.0
+var _nav_direct_t: float = 0.0
+var _nav_path: PackedVector3Array = PackedVector3Array()
+var _nav_path_i: int = 0
 var _pushed_t: float = 0.0
 var _dev_ui_timer: float = 0.0
 var _is_unloading_at_storage: bool = false
@@ -419,11 +422,16 @@ func _nav_go_to(goal: Vector3) -> void:
 	_path_goal_A = goal
 	_current_target_pos = goal
 	_nav_side_step = false
+	_nav_direct_t = 0.0
 	_stuck_t = 0.0
 	_stuck_cycles = 0
+	_nav_path = PackedVector3Array()
+	_nav_path_i = 0
 	_last_pos_xz = Vector2(global_position.x, global_position.z)
 	if nav_agent:
 		nav_agent.target_position = goal
+		call_deferred("_nav_refresh_path")
+		_nav_refresh_path()
 
 
 ## Упёрся: шаг в сторону (от соседа / ⊥ к A), на mesh
@@ -565,42 +573,135 @@ func _push_peers(delta: float) -> void:
 		velocity.x -= dir.x * impulse * 0.15
 		velocity.z -= dir.z * impulse * 0.15
 
-## Перемещение по navmesh
+
+func _nav_refresh_path() -> void:
+	if not nav_agent:
+		return
+	nav_agent.target_position = _current_target_pos
+	_nav_path = nav_agent.get_current_navigation_path()
+	_nav_path_i = 0
+	if _nav_path.is_empty():
+		return
+	var best_i: int = 0
+	var best_d: float = INF
+	for i in range(_nav_path.size()):
+		var d: float = Vector2(global_position.x - _nav_path[i].x, global_position.z - _nav_path[i].z).length()
+		if d < best_d:
+			best_d = d
+			best_i = i
+	_nav_path_i = mini(best_i + 1, _nav_path.size() - 1)
+
+
+func _nav_hard_nudge_to_goal() -> void:
+	var goal: Vector3 = _path_goal_A if _path_goal_A != Vector3.ZERO else _current_target_pos
+	var to: Vector3 = goal - global_position
+	to.y = 0.0
+	if to.length_squared() < 0.0001:
+		return
+	var raw: Vector3 = global_position + to.normalized() * 0.45
+	if nav_agent:
+		var map_rid: RID = nav_agent.get_navigation_map()
+		raw = NavigationServer3D.map_get_closest_point(map_rid, raw)
+	global_position.x = raw.x
+	global_position.z = raw.z
+
+
+## Прямо к цели
+func _nav_move_direct(delta: float, goal: Vector3) -> void:
+	var to := goal - global_position
+	to.y = 0.0
+	var dist := to.length()
+	if dist <= arrival_distance:
+		_stop_horizontal_movement(delta)
+		move_and_slide()
+		return
+	var move_dir := to / dist
+	var move_spd: float = speed * _energy_mult()
+	var vx: float = move_dir.x * move_spd
+	var vz: float = move_dir.z * move_spd
+	var step_len: float = Vector2(vx * delta, vz * delta).length()
+	if step_len > max_step_distance and delta > 0.0:
+		var cap: float = max_step_distance / step_len
+		vx *= cap
+		vz *= cap
+	velocity.x = vx
+	velocity.z = vz
+	_face_dir(vx, vz, delta, 0.25)
+	move_and_slide()
+
+
+## Перемещение: waypoints path + direct fallback
 func _process_nav_movement(delta: float) -> void:
 	if not nav_agent:
 		_on_movement_finished()
 		return
 
-	var current_pos = global_position
+	var current_pos: Vector3 = global_position
 	var pos_xz := Vector2(current_pos.x, current_pos.z)
-	var dist_to_final = pos_xz.distance_to(Vector2(_current_target_pos.x, _current_target_pos.z))
+	var goal: Vector3 = _current_target_pos
+	var dist_to_final: float = pos_xz.distance_to(Vector2(goal.x, goal.z))
 
-	# дошли до текущей цели
-	if nav_agent.is_navigation_finished() or dist_to_final <= arrival_distance:
+	if dist_to_final <= arrival_distance:
 		_stop_horizontal_movement(delta)
 		if _nav_side_step:
-			# был шаг в сторону → repath к A
 			_nav_repath_A()
 			move_and_slide()
 			return
+		_nav_direct_t = 0.0
 		_stuck_t = 0.0
 		_stuck_cycles = 0
 		_on_movement_finished()
 		move_and_slide()
 		return
 
-	# stuck detect (с паузой после side/repath — меньше мельтешения)
+	# direct burst
+	if _nav_direct_t > 0.0:
+		_nav_direct_t -= delta
+		_nav_move_direct(delta, goal)
+		return
+
+	# path finished but not there
+	if nav_agent.is_navigation_finished() and dist_to_final > arrival_distance:
+		_nav_refresh_path()
+		_nav_direct_t = 1.0
+		_nav_hard_nudge_to_goal()
+		_nav_move_direct(delta, goal)
+		return
+
+	# stuck
 	_stuck_cd = maxf(_stuck_cd - delta, 0.0)
-	var hvel := Vector2(velocity.x, velocity.z).length()
-	var moved := pos_xz.distance_to(_last_pos_xz)
+	var hvel: float = Vector2(velocity.x, velocity.z).length()
+	var moved: float = pos_xz.distance_to(_last_pos_xz)
 	_last_pos_xz = pos_xz
-	if _stuck_cd <= 0.0 and hvel < 0.05 and moved < 0.02:
+	if _stuck_cd <= 0.0 and hvel < 0.1 and moved < 0.04:
 		_stuck_t += delta
-		if _stuck_t >= stuck_time:
+		# быстрее реагируем на mesh-jam
+		var lim: float = minf(stuck_time, 1.0)
+		if _stuck_t >= lim:
 			_stuck_t = 0.0
-			if _nav_side_step:
-				# застрял и на side — сразу repath A
-				_nav_repath_A()
+			_stuck_cd = 0.4
+			_stuck_cycles += 1
+			if _stuck_cycles >= stuck_max_cycles:
+				# последний шанс: nudge + finish if close enough
+				_nav_hard_nudge_to_goal()
+				if pos_xz.distance_to(Vector2(goal.x, goal.z)) <= arrival_distance * 3.0:
+					_on_movement_finished()
+				else:
+					_nav_direct_t = 1.2
+					_nav_move_direct(delta, goal)
+				move_and_slide()
+				return
+			# 1) skip waypoint  2) nudge+direct  3) side
+			var mode: int = _stuck_cycles % 3
+			if mode == 0:
+				if _nav_path_i < _nav_path.size() - 1:
+					_nav_path_i += 1
+				_nav_direct_t = 0.7
+				_nav_hard_nudge_to_goal()
+			elif mode == 1:
+				_nav_refresh_path()
+				_nav_direct_t = 1.0
+				_nav_hard_nudge_to_goal()
 			else:
 				_nav_step_aside()
 			move_and_slide()
@@ -608,31 +709,55 @@ func _process_nav_movement(delta: float) -> void:
 	else:
 		_stuck_t = 0.0
 
-	var next_path_pos = nav_agent.get_next_path_position()
-	var dir = (next_path_pos - current_pos)
-	dir.y = 0.0
+	# refresh empty path
+	if _nav_path.is_empty():
+		_nav_refresh_path()
 
-	if dir.length_squared() > 0.001:
-		var move_dir = dir.normalized()
-		var move_spd: float = speed * _energy_mult()
-		var target_vel_x = move_dir.x * move_spd
-		var target_vel_z = move_dir.z * move_spd
-		var step_len = Vector2(target_vel_x * delta, target_vel_z * delta).length()
-		if step_len > max_step_distance and delta > 0.0:
-			var cap_factor = max_step_distance / step_len
-			target_vel_x *= cap_factor
-			target_vel_z *= cap_factor
-		var intended_velocity = Vector3(target_vel_x, velocity.y, target_vel_z)
-		if nav_agent.avoidance_enabled:
-			nav_agent.set_velocity(intended_velocity)
-		else:
-			velocity.x = intended_velocity.x
-			velocity.z = intended_velocity.z
-			_face_dir(move_dir.x * move_spd, move_dir.z * move_spd, delta, 0.35)
-			move_and_slide()
+	# target waypoint
+	var aim: Vector3 = goal
+	if not _nav_path.is_empty():
+		# advance along path
+		while _nav_path_i < _nav_path.size():
+			var wp: Vector3 = _nav_path[_nav_path_i]
+			var d_wp: float = Vector2(current_pos.x - wp.x, current_pos.z - wp.z).length()
+			if d_wp <= maxf(arrival_distance, 0.35):
+				_nav_path_i += 1
+				continue
+			aim = wp
+			break
+		if _nav_path_i >= _nav_path.size():
+			aim = goal
+
+	var dir: Vector3 = aim - current_pos
+	dir.y = 0.0
+	var next_dist: float = dir.length()
+
+	if next_dist < 0.05:
+		# jam under feet → goal direct
+		_nav_direct_t = 0.6
+		_nav_hard_nudge_to_goal()
+		_nav_move_direct(delta, goal)
+		return
+
+	var move_dir: Vector3 = dir / next_dist
+	var move_spd: float = speed * _energy_mult()
+	var target_vel_x: float = move_dir.x * move_spd
+	var target_vel_z: float = move_dir.z * move_spd
+	var step_len2: float = Vector2(target_vel_x * delta, target_vel_z * delta).length()
+	if step_len2 > max_step_distance and delta > 0.0:
+		var cap2: float = max_step_distance / step_len2
+		target_vel_x *= cap2
+		target_vel_z *= cap2
+
+	# always drive velocity (avoidance optional)
+	if nav_agent.avoidance_enabled:
+		nav_agent.set_velocity(Vector3(target_vel_x, velocity.y, target_vel_z))
 	else:
-		_stop_horizontal_movement(delta)
+		velocity.x = target_vel_x
+		velocity.z = target_vel_z
+		_face_dir(target_vel_x, target_vel_z, delta, 0.3)
 		move_and_slide()
+
 
 ## Колбэк RVO Avoidance от навигационного сервера Godot
 func _on_safe_velocity_computed(safe_velocity: Vector3) -> void:
