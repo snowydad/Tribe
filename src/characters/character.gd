@@ -1,6 +1,6 @@
 # ==============================================================================
 # character.gd — FSM, nav, work, drop. Matrix → CharacterDecision.
-# ОБНОВЛЕНО: 2026-10-10 — peer push: walker shoves idle
+# ОБНОВЛЕНО: 2026-10-11 — smooth facing: angle deadzone + soft lerp
 # ==============================================================================
 extends CharacterBody3D
 
@@ -210,8 +210,9 @@ func _physics_process(delta: float) -> void:
 				_process_arc_drop_movement(delta)
 				move_and_slide()
 			else:
-				_stop_horizontal_movement(delta)
-				_rotate_towards_target(target_harvest, delta)
+				_dampen_horizontal(delta)
+				if _pushed_t <= 0.0:
+					_rotate_towards_target(target_harvest, delta)
 				_process_gathering(delta)
 				move_and_slide()
 
@@ -226,8 +227,9 @@ func _physics_process(delta: float) -> void:
 				_process_arc_drop_movement(delta)
 				move_and_slide()
 			elif _is_unloading_at_storage:
-				_stop_horizontal_movement(delta)
-				_rotate_towards_target(target_storage, delta)
+				_dampen_horizontal(delta)
+				if _pushed_t <= 0.0:
+					_rotate_towards_target(target_storage, delta)
 				_process_delivering_unload(delta)
 				move_and_slide()
 			else:
@@ -237,8 +239,9 @@ func _physics_process(delta: float) -> void:
 						and _at_work_point(target_storage) and WorkSite.can_accept(target_storage, self):
 					_is_unloading_at_storage = true
 					_work_timer = 0.0
-					_stop_horizontal_movement(delta)
-					_rotate_towards_target(target_storage, delta)
+					_dampen_horizontal(delta)
+					if _pushed_t <= 0.0:
+						_rotate_towards_target(target_storage, delta)
 					_process_delivering_unload(delta)
 					move_and_slide()
 				elif target_storage and is_instance_valid(target_storage) and data and data.item_amount > 0 \
@@ -256,7 +259,7 @@ func _physics_process(delta: float) -> void:
 				_process_arc_drop_movement(delta)
 				move_and_slide()
 			else:
-				_stop_horizontal_movement(delta)
+				_dampen_horizontal(delta)
 				_process_eating(delta)
 				move_and_slide()
 
@@ -265,8 +268,9 @@ func _physics_process(delta: float) -> void:
 				_process_arc_drop_movement(delta)
 				move_and_slide()
 			else:
-				_stop_horizontal_movement(delta)
-				_rotate_towards_target(target_obstacle, delta)
+				_dampen_horizontal(delta)
+				if _pushed_t <= 0.0:
+					_rotate_towards_target(target_obstacle, delta)
 				_process_clearing(delta)
 				move_and_slide()
 
@@ -489,6 +493,34 @@ func _nav_repath_A() -> void:
 
 
 
+
+
+## Поворот только при заметном угле; мелкие флипы — игнор / очень мягко
+func _face_dir(dir_x: float, dir_z: float, delta: float, min_speed: float = 0.35) -> void:
+	var dlen := Vector2(dir_x, dir_z).length()
+	if dlen < min_speed:
+		return
+	var target_angle := atan2(-dir_x, -dir_z)
+	var diff := absf(angle_difference(rotation.y, target_angle))
+	# мёртвая зона ~8° — убирает микро-дёрганье
+	if diff < 0.14:
+		return
+	var turn := rotation_speed * delta
+	if diff < 0.5:
+		turn *= 0.35  # мелкий доворот медленнее
+	rotation.y = lerp_angle(rotation.y, target_angle, clampf(turn, 0.0, 1.0))
+
+
+## Стоп, но если толкнули — мягкое трение (иначе «вкопанный»)
+func _dampen_horizontal(delta: float) -> void:
+	if _pushed_t > 0.0:
+		_pushed_t -= delta
+		velocity.x = move_toward(velocity.x, 0.0, speed * delta * 2.0)
+		velocity.z = move_toward(velocity.z, 0.0, speed * delta * 2.0)
+	else:
+		_stop_horizontal_movement(delta)
+
+
 ## Идущий толкает стоящего / более медленного
 func _push_peers(delta: float) -> void:
 	if current_state == State.DEAD or current_state == State.CARRIED or is_being_dragged:
@@ -517,16 +549,18 @@ func _push_peers(delta: float) -> void:
 		if dist > push_radius or dist < 0.001:
 			continue
 		var other_spd := Vector2(other.velocity.x, other.velocity.z).length()
-		# толкаем того, кто медленнее / стоит
-		if other_spd >= my_spd * 0.9:
+		# толкаем более медленного (стоящий / gather / edge stuck)
+		if other_spd >= my_spd * 0.95:
 			continue
 		var dir: Vector3 = offset / dist
-		# импульс сильнее, чем ближе
 		var w: float = 1.0 - (dist / push_radius)
 		var impulse: float = push_strength * w * my_spd * delta * 10.0
+		# стоячим — сильнее
+		if other_spd < 0.05:
+			impulse *= 1.5
 		other.velocity.x += dir.x * impulse
 		other.velocity.z += dir.z * impulse
-		other.set("_pushed_t", 0.35)
+		other.set("_pushed_t", 0.5)
 		other.move_and_slide()
 		velocity.x -= dir.x * impulse * 0.15
 		velocity.z -= dir.z * impulse * 0.15
@@ -589,13 +623,12 @@ func _process_nav_movement(delta: float) -> void:
 			target_vel_x *= cap_factor
 			target_vel_z *= cap_factor
 		var intended_velocity = Vector3(target_vel_x, velocity.y, target_vel_z)
-		var target_angle = atan2(-move_dir.x, -move_dir.z)
 		if nav_agent.avoidance_enabled:
 			nav_agent.set_velocity(intended_velocity)
 		else:
 			velocity.x = intended_velocity.x
 			velocity.z = intended_velocity.z
-			rotation.y = lerp_angle(rotation.y, target_angle, rotation_speed * delta)
+			_face_dir(move_dir.x * move_spd, move_dir.z * move_spd, delta, 0.35)
 			move_and_slide()
 	else:
 		_stop_horizontal_movement(delta)
@@ -609,9 +642,7 @@ func _on_safe_velocity_computed(safe_velocity: Vector3) -> void:
 		velocity.x = safe_velocity.x
 		velocity.z = safe_velocity.z
 		var vel_2d = Vector2(safe_velocity.x, safe_velocity.z)
-		if vel_2d.length_squared() > 0.05:
-			var target_angle = atan2(-vel_2d.x, -vel_2d.y)
-			rotation.y = lerp_angle(rotation.y, target_angle, rotation_speed * get_physics_process_delta_time())
+		_face_dir(vel_2d.x, vel_2d.y, get_physics_process_delta_time(), 0.4)
 		move_and_slide()
 
 ## Разворот лицом к целевому объекту
@@ -620,9 +651,9 @@ func _rotate_towards_target(target_node: Node3D, delta: float) -> void:
 		return
 	var dir = (target_node.global_position - global_position)
 	dir.y = 0.0
-	if dir.length_squared() > 0.001:
-		var target_angle = atan2(-dir.x, -dir.z)
-		rotation.y = lerp_angle(rotation.y, target_angle, rotation_speed * delta)
+	if dir.length_squared() > 0.01:
+		_face_dir(dir.x, dir.z, delta, 0.01)
+
 
 func _on_movement_finished() -> void:
 	if current_state == State.MOVING:
