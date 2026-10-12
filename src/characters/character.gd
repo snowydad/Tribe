@@ -1,6 +1,6 @@
 # ==============================================================================
 # character.gd — FSM, nav, work, drop. Matrix → CharacterDecision.
-# ОБНОВЛЕНО: 2026-10-11 — keep agent path alive for debug (get_next each frame)
+# ОБНОВЛЕНО: 2026-10-12 — click storage empty hands → walk WP (not silent IDLE)
 # ==============================================================================
 extends CharacterBody3D
 
@@ -175,6 +175,10 @@ func _physics_process(delta: float) -> void:
 	# 2. Гравитация
 	if not is_on_floor():
 		velocity.y -= gravity * delta
+
+	# нужда есть → EAT (не только IDLE; сборщики)
+	if decision and current_state != State.DEAD and not is_being_dragged:
+		decision.tick_eat_need()
 
 	# 3. Машина состояний (FSM)
 	match current_state:
@@ -1254,12 +1258,33 @@ func start_delivering_to_storage(storage_node: Node3D) -> void:
 	if not storage_node or not is_instance_valid(storage_node):
 		return
 
-	# без груза — не deliver
+	# без груза — всё равно идём на WP склада (клик как у куста; deposit/eat решат на месте)
 	if not (data and data.item_amount > 0):
 		_is_unloading_at_storage = false
-		target_storage = null
-		move_intent = ""
-		current_state = State.IDLE
+		is_being_dragged = false
+		_awaiting_drop_decide = false
+		target_storage = storage_node
+		if storage_node.has_method("set_active_work"):
+			storage_node.set_active_work("withdraw")
+		_current_target_pos = _get_free_work_point_safe(storage_node)
+		# голод → eat-таск; иначе просто прийти к складу
+		if decision and decision.has_method("should_eat_from_storage") and decision.should_eat_from_storage():
+			decision.want_storage_meal = true
+			if decision.has_method("ensure_eat_task"):
+				decision.ensure_eat_task()
+			move_intent = "eat"
+		else:
+			move_intent = "work"
+		if task_manager:
+			task_manager.set_user_override_task(TaskManager.Task.new(TaskManager.TaskType.MOVE_TO, _current_target_pos, storage_node, 10, false))
+		if is_on_floor() and _at_work_point(storage_node):
+			current_state = State.IDLE
+			if decision and move_intent == "eat" and decision.has_method("execute_eat_task"):
+				decision.promote_eat_task()
+				decision.execute_eat_task()
+		else:
+			current_state = State.MOVING
+			_nav_go_to(_current_target_pos)
 		return
 
 	if target_storage and is_instance_valid(target_storage) and target_storage != storage_node:

@@ -61,7 +61,9 @@ func push_task(task: Task) -> void:
 
 ## Добавить приоритетную задачу (например, поесть при голоде или доставить при полном инвентаре)
 func push_subtask(task: Task) -> void:
-	# Субзадача ставится поверх текущей очереди
+	# антидубль по типу (EAT и т.п.)
+	if has_task_of_type(task.type):
+		return
 	if task.priority == 0:
 		task.priority = 50
 	_queue.push_front(task)
@@ -127,6 +129,39 @@ func clear_all() -> void:
 ## Проверка наличия задач
 func has_tasks() -> bool:
 	return _current_task != null or _queue.size() > 0
+
+
+## Сделать задачу типа t текущей (старую current — обратно в очередь)
+func promote_task_type(t: TaskType) -> bool:
+	if _current_task != null and _current_task.type == t:
+		return true
+	var found: Task = null
+	var found_i: int = -1
+	for i in range(_queue.size()):
+		if _queue[i].type == t:
+			found = _queue[i]
+			found_i = i
+			break
+	if found == null:
+		return false
+	_queue.remove_at(found_i)
+	if _current_task != null:
+		_queue.push_back(_current_task)
+		_current_task = null
+	_current_task = found
+	task_started.emit(_current_task)
+	queue_changed.emit()
+	return true
+
+
+## Есть ли уже задача данного типа (current или queue) — антидубль
+func has_task_of_type(t: TaskType) -> bool:
+	if _current_task != null and _current_task.type == t:
+		return true
+	for q in _queue:
+		if q.type == t:
+			return true
+	return false
 
 ## Название текущей активной задачи для отладки
 func get_current_task_debug_name() -> String:

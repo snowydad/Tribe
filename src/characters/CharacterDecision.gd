@@ -1,6 +1,6 @@
 # ==============================================================================
 # CharacterDecision.gd — решения (eat / deliver / harvest / drop). Движение — host.
-# ОБНОВЛЕНО: 2026-10-09 — cleanup, логика та же
+# ОБНОВЛЕНО: 2026-10-12 — EAT promote when hungry (gatherers eat)
 # ==============================================================================
 class_name CharacterDecision
 extends RefCounted
@@ -161,21 +161,80 @@ func should_go_harvest() -> bool:
 	return knows_harvest()
 
 
-func start_eat_hands() -> void:
-	_cargo_drop_timer = 0.0
-	want_storage_meal = false
-	host._is_unloading_at_storage = false
+## Нужда есть → один EAT subtask (не стартует анимацию; выполнение — execute_eat_task)
+func ensure_eat_task() -> void:
+	if not host:
+		return
+	if not (should_eat_from_hands() or should_eat_from_storage()):
+		return
 	var tm = _tm()
-	if tm:
-		tm.push_subtask(TaskManager.Task.new(TaskManager.TaskType.EAT, Vector3.ZERO, null, 90))
-	host.start_eating()
+	if tm == null:
+		return
+	if tm.has_task_of_type(TaskManager.TaskType.EAT):
+		return
+	tm.push_subtask(TaskManager.Task.new(TaskManager.TaskType.EAT, Vector3.ZERO, null, 90))
+
+
+func promote_eat_task() -> bool:
+	var tm = _tm()
+	if tm == null:
+		return false
+	if not tm.has_task_of_type(TaskManager.TaskType.EAT):
+		return false
+	return tm.promote_task_type(TaskManager.TaskType.EAT)
+
+
+func tick_eat_need() -> void:
+	if host == null:
+		return
+	if host.current_state == host.State.DEAD or host.current_state == host.State.CARRIED:
+		return
+	if host.current_state == host.State.EATING:
+		return
+	if not (should_eat_from_hands() or should_eat_from_storage()):
+		return
+	ensure_eat_task()
+	if host.current_state == host.State.GATHERING:
+		return
+	if host.current_state == host.State.DELIVERING and host._is_unloading_at_storage:
+		return
+	if not promote_eat_task():
+		return
+	if host.move_intent == "eat" and host.current_state == host.State.MOVING:
+		return
+	execute_eat_task()
+
+
+## Выполнить текущий EAT (руки или склад) — без повторного push
+func execute_eat_task() -> void:
+	_cargo_drop_timer = 0.0
+	if has_edible_cargo():
+		want_storage_meal = false
+		host._is_unloading_at_storage = false
+		host.start_eating()
+		return
+	if should_eat_from_storage() or storage_has_food():
+		go_eat_from_storage()
+		return
+	# есть нельзя — снять таск
+	var tm = _tm()
+	if tm and tm.get_current_task() and tm.get_current_task().type == TaskManager.TaskType.EAT:
+		tm.complete_current_task()
+
+
+func start_eat_hands() -> void:
+	ensure_eat_task()
+	promote_eat_task()
+	execute_eat_task()
 
 
 func resolve_cargo_action() -> void:
 	if not hands_busy():
 		return
 	if should_eat_from_hands():
-		start_eat_hands()
+		ensure_eat_task()
+		promote_eat_task()
+		execute_eat_task()
 		return
 	if should_deliver():
 		var nearest_st = host._find_nearest_storage_node()
@@ -363,10 +422,8 @@ func resolve_after_drop(drop_site: Node3D = null) -> void:
 						host.start_clearing_obstacle(cur.target_node)
 						return
 				TaskManager.TaskType.EAT:
-					if has_edible_cargo():
-						host.start_eating()
-						return
-					tm.complete_current_task()
+					execute_eat_task()
+					return
 				TaskManager.TaskType.MOVE_TO:
 					host.move_to_position(cur.target_pos)
 					drop_eat_if_hungry()
@@ -396,40 +453,42 @@ func resolve_after_drop(drop_site: Node3D = null) -> void:
 func process_idle(delta: float) -> void:
 	tick_cargo_drop(delta)
 
+	# нужда есть → всегда таск EAT (после текущего, без дубля)
+	if should_eat_from_hands() or should_eat_from_storage():
+		ensure_eat_task()
+
 	if hands_busy():
-		if should_eat_from_hands():
-			start_eat_hands()
-			return
-		if should_deliver():
+		# eat уже в очереди; deliver только если не жрём с рук
+		if not should_eat_from_hands() and should_deliver():
 			host._go_to_nearest_storage()
 			return
-		_idle_check_timer += delta
-		if _idle_check_timer >= 0.5:
-			_idle_check_timer = 0.0
-			if should_deliver():
-				host._go_to_nearest_storage()
-		return
-
-	# empty hands
-	if should_eat_from_storage():
-		go_eat_from_storage()
-		return
-
-	if should_go_harvest():
-		try_work_or_wander_harvest(host.target_harvest)
-		return
+		if should_eat_from_hands():
+			pass  # EAT в стеке — ниже
+		else:
+			_idle_check_timer += delta
+			if _idle_check_timer >= 0.5:
+				_idle_check_timer = 0.0
+				if should_deliver():
+					host._go_to_nearest_storage()
+					return
+			# нет deliver/eat — ниже tasks / harvest
+			if not (should_eat_from_hands() or should_eat_from_storage()):
+				# fall through only if tasks may exist
+				pass
 
 	var tm = _tm()
 	if tm and tm.has_tasks():
 		var cur_task = tm.get_current_task()
 		if cur_task:
 			match cur_task.type:
+				TaskManager.TaskType.EAT:
+					execute_eat_task()
+					return
 				TaskManager.TaskType.GATHER:
 					if cur_task.target_node and is_instance_valid(cur_task.target_node):
 						host.target_harvest = cur_task.target_node
-						if should_eat_from_storage():
-							go_eat_from_storage()
-							return
+						if should_eat_from_hands() or should_eat_from_storage():
+							ensure_eat_task()
 						try_work_or_wander_harvest(cur_task.target_node)
 						return
 				TaskManager.TaskType.DELIVER:
@@ -441,12 +500,6 @@ func process_idle(delta: float) -> void:
 						else:
 							tm.complete_current_task()
 						return
-				TaskManager.TaskType.EAT:
-					if has_edible_cargo():
-						host.start_eating()
-					else:
-						tm.complete_current_task()
-					return
 				TaskManager.TaskType.CLEAR:
 					if cur_task.target_node and is_instance_valid(cur_task.target_node):
 						if not WorkSite.is_site(cur_task.target_node) or WorkSite.can_accept(cur_task.target_node, host):
@@ -461,6 +514,11 @@ func process_idle(delta: float) -> void:
 						host.move_to_position(cur_task.target_pos)
 					return
 
+	# нет активных тасков (или очередь пуста после complete) — harvest
+	if not hands_busy() and should_go_harvest():
+		try_work_or_wander_harvest(host.target_harvest)
+		return
+
 	# poll harvest / full storage meal
 	if knows_harvest() or storage_is_full():
 		_idle_check_timer += delta
@@ -468,8 +526,8 @@ func process_idle(delta: float) -> void:
 			_idle_check_timer = 0.0
 			if hands_busy():
 				return
-			if should_eat_from_storage():
-				go_eat_from_storage()
+			if should_eat_from_hands() or should_eat_from_storage():
+				ensure_eat_task()
 				return
 			if knows_harvest():
 				try_work_or_wander_harvest(host.target_harvest)

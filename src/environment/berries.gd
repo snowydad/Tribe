@@ -1,3 +1,4 @@
+# ОБНОВЛЕНО: 2026-10-12 — die: queue_free + stub spawn near WP
 # ОБНОВЛЕНО: 2026-10-09 — work_anim; nutrition из items.ini (fallback berries)
 # ОБНОВЛЕНО: 2026-10-08 — WP: nearest free Marker3D (same as storage)
 # ==============================================================================
@@ -164,9 +165,32 @@ func _die_bush() -> void:
 	is_ripening = false
 	_ripen_timer = 0.0
 	current_berries = 0
-	_update_dev_ui()
-	_update_visuals()
-	print("[Berries] Bush died after %d life cycles (max=%d)." % [life_cycles_count, life_cycles_max])
+	var spawn_at: Vector3 = _respawn_anchor_position()
+	print("[Berries] Bush died after %d life cycles (max=%d). remove @ %s" % [
+		life_cycles_count, life_cycles_max, str(global_position)
+	])
+	# место под будущий спавн: рядом / в рабочей точке
+	_request_respawn_near(spawn_at)
+	# объект убрать — клик = пустое место
+	queue_free()
+
+
+## Точка, рядом с которой потом заспавнить новый куст (WP или своя позиция)
+func _respawn_anchor_position() -> Vector3:
+	var markers: Array = _work_markers()
+	if markers.size() > 0 and markers[0] is Marker3D:
+		return (markers[0] as Marker3D).global_position
+	return global_position
+
+
+## STUB: заспавнить новый куст у anchor (сейчас только лог / хук)
+## Позже: instantiate berries.tscn, parent = get_parent(), position ≈ anchor
+func _request_respawn_near(anchor: Vector3) -> void:
+	# TODO: var scene = preload("res://src/environment/berries.tscn")
+	# TODO: var bush = scene.instantiate()
+	# TODO: get_parent().add_child(bush)
+	# TODO: bush.global_position = anchor + offset
+	print("[Berries] TODO respawn near WP/anchor %s" % str(anchor))
 
 
 # --- WorkSite contract ---
