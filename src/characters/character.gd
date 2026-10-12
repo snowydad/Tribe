@@ -1,6 +1,6 @@
 # ==============================================================================
 # character.gd — FSM, nav, work, drop. Matrix → CharacterDecision.
-# ОБНОВЛЕНО: 2026-10-12 — click storage empty hands → walk WP (not silent IDLE)
+# ОБНОВЛЕНО: 2026-10-12 — wander y>-1, 1 try/frame (no FPS spike)
 # ==============================================================================
 extends CharacterBody3D
 
@@ -71,6 +71,7 @@ var _drop_think_left: float = -1.0
 var drop_think_time: float = 2.0
 var wander_radius_min: float = 5.0
 var wander_radius_max: float = 15.0
+var wander_min_y: float = -1.0  # ниже — вода; y > -1 ок (по пояс)
 
 var work_speed: float = 1.0
 var eat_speed: float = 1.0
@@ -115,6 +116,7 @@ func _ready() -> void:
 			drop_think_time = float(ConfigLoader.get_character_value("base_stats", "drop_think_time", drop_think_time))
 			wander_radius_min = float(ConfigLoader.get_character_value("base_stats", "wander_radius_min", wander_radius_min))
 			wander_radius_max = float(ConfigLoader.get_character_value("base_stats", "wander_radius_max", wander_radius_max))
+			wander_min_y = float(ConfigLoader.get_character_value("base_stats", "wander_min_y", wander_min_y))
 		elif ConfigLoader.has_method("get_config_value"):
 			speed = float(ConfigLoader.get_config_value("character", "base_stats", "move_speed", speed))
 			work_speed = float(ConfigLoader.get_config_value("character", "base_stats", "work_speed", work_speed))
@@ -130,6 +132,7 @@ func _ready() -> void:
 			drop_think_time = float(ConfigLoader.get_config_value("character", "base_stats", "drop_think_time", drop_think_time))
 			wander_radius_min = float(ConfigLoader.get_config_value("character", "base_stats", "wander_radius_min", wander_radius_min))
 			wander_radius_max = float(ConfigLoader.get_config_value("character", "base_stats", "wander_radius_max", wander_radius_max))
+			wander_min_y = float(ConfigLoader.get_config_value("character", "base_stats", "wander_min_y", wander_min_y))
 
 	# Настройка агента и подключение RVO2 Avoidance
 	if nav_agent:
@@ -799,6 +802,13 @@ func _rotate_towards_target(target_node: Node3D, delta: float) -> void:
 
 func _on_movement_finished() -> void:
 	if current_state == State.MOVING:
+		# wander: rest в decision
+		if move_intent == "wander":
+			move_intent = ""
+			current_state = State.IDLE
+			if decision and decision.has_method("on_wander_finished"):
+				decision.on_wander_finished()
+			return
 		# После context drop — think, не work
 		if _awaiting_drop_decide:
 			_begin_drop_think()
@@ -1166,15 +1176,32 @@ func _begin_drop_think() -> void:
 func wander_nearby(radius_min: float = -1.0, radius_max: float = -1.0) -> void:
 	_awaiting_drop_decide = false
 	_drop_think_left = -1.0
-	move_intent = "wander"
 	var rmin: float = wander_radius_min if radius_min < 0.0 else radius_min
 	var rmax: float = wander_radius_max if radius_max < 0.0 else radius_max
 	if rmax < rmin:
 		rmax = rmin
+	# 1 попытка за вызов (не 8×50 персов в тик). Неудача → idle, decision вызовет снова.
 	var r: float = randf_range(rmin, rmax)
 	var a: float = randf() * TAU
-	var dest: Vector3 = global_position + Vector3(cos(a) * r, 0.0, sin(a) * r)
-	dest.y = global_position.y
+	var cand: Vector3 = global_position + Vector3(cos(a) * r, 0.0, sin(a) * r)
+	cand.y = global_position.y
+	var dest: Vector3 = cand
+	if nav_agent:
+		var map_rid: RID = nav_agent.get_navigation_map()
+		if map_rid.is_valid():
+			var on_mesh: Vector3 = NavigationServer3D.map_get_closest_point(map_rid, cand)
+			var pull: float = Vector2(cand.x - on_mesh.x, cand.z - on_mesh.z).length()
+			# y > -1 (вода 0, по пояс ок); pull — не «съехали» в никуда
+			if pull > 2.0 or on_mesh.y <= wander_min_y:
+				# в этом кадре не идём — rest/boredom снова наберёт
+				move_intent = ""
+				return
+			var d_me: float = Vector2(global_position.x - on_mesh.x, global_position.z - on_mesh.z).length()
+			if d_me < 0.5:
+				move_intent = ""
+				return
+			dest = on_mesh
+	move_intent = "wander"
 	_soft_move_to(dest)
 
 

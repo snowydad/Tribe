@@ -1,6 +1,6 @@
 # ==============================================================================
 # CharacterDecision.gd — решения (eat / deliver / harvest / drop). Движение — host.
-# ОБНОВЛЕНО: 2026-10-12 — EAT promote when hungry (gatherers eat)
+# ОБНОВЛЕНО: 2026-10-12 — idle wander when !has_tasks + rest (step 2)
 # ==============================================================================
 class_name CharacterDecision
 extends RefCounted
@@ -11,10 +11,57 @@ var cargo_drop_delay: float = 30.0
 var _cargo_drop_timer: float = 0.0
 var want_storage_meal: bool = false
 var _idle_check_timer: float = 0.0
+# idle wander (ini: base_stats)
+var idle_wander_delay: float = 3.0
+var wander_rest_min: float = 2.0
+var wander_rest_max: float = 5.0
+var _idle_boredom_t: float = 0.0
+var _wander_rest_t: float = 0.0
+var _wander_cfg_loaded: bool = false
 
 
 func setup(h: CharacterBody3D) -> void:
 	host = h
+	_load_idle_wander_cfg()
+
+
+func _load_idle_wander_cfg() -> void:
+	if _wander_cfg_loaded:
+		return
+	_wander_cfg_loaded = true
+	if not ConfigLoader:
+		return
+	if ConfigLoader.has_method("get_character_value"):
+		idle_wander_delay = float(ConfigLoader.get_character_value("base_stats", "idle_wander_delay", idle_wander_delay))
+		wander_rest_min = float(ConfigLoader.get_character_value("base_stats", "wander_rest_min", wander_rest_min))
+		wander_rest_max = float(ConfigLoader.get_character_value("base_stats", "wander_rest_max", wander_rest_max))
+	elif ConfigLoader.has_method("get_config_value"):
+		idle_wander_delay = float(ConfigLoader.get_config_value("character", "base_stats", "idle_wander_delay", idle_wander_delay))
+		wander_rest_min = float(ConfigLoader.get_config_value("character", "base_stats", "wander_rest_min", wander_rest_min))
+		wander_rest_max = float(ConfigLoader.get_config_value("character", "base_stats", "wander_rest_max", wander_rest_max))
+	if wander_rest_max < wander_rest_min:
+		wander_rest_max = wander_rest_min
+
+
+func _tick_wander_rest(delta: float) -> void:
+	if _wander_rest_t > 0.0:
+		_wander_rest_t = maxf(_wander_rest_t - delta, 0.0)
+
+
+func _try_idle_wander() -> void:
+	# строго: очередь пуста
+	var tm = _tm()
+	if tm and tm.has_tasks():
+		_idle_boredom_t = 0.0
+		return
+	if _wander_rest_t > 0.0:
+		return
+	if host == null or not host.has_method("wander_nearby"):
+		return
+	_idle_boredom_t = 0.0
+	# rest наберётся в IDLE после прогулки (пока MOVING process_idle не тикает)
+	_wander_rest_t = randf_range(wander_rest_min, wander_rest_max)
+	host.wander_nearby()
 
 
 func _data():
@@ -452,6 +499,8 @@ func resolve_after_drop(drop_site: Node3D = null) -> void:
 
 func process_idle(delta: float) -> void:
 	tick_cargo_drop(delta)
+	_load_idle_wander_cfg()
+	_tick_wander_rest(delta)
 
 	# нужда есть → всегда таск EAT (после текущего, без дубля)
 	if should_eat_from_hands() or should_eat_from_storage():
@@ -531,3 +580,14 @@ func process_idle(delta: float) -> void:
 				return
 			if knows_harvest():
 				try_work_or_wander_harvest(host.target_harvest)
+
+	# --- idle wander: нет задач + rest вышел ---
+	var tm_idle = _tm()
+	if tm_idle and tm_idle.has_tasks():
+		_idle_boredom_t = 0.0
+		return
+	if _wander_rest_t > 0.0:
+		return
+	_idle_boredom_t += delta
+	if _idle_boredom_t >= idle_wander_delay:
+		_try_idle_wander()

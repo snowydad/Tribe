@@ -1,4 +1,4 @@
-# ОБНОВЛЕНО: 2026-10-07 — talent XP/speed via talents_skills + xp_talent_multiplier
+# ОБНОВЛЕНО: 2026-10-12 — hunger_work_mult when activity=work
 # ==============================================================================
 # ОБНОВЛЕНО: 2026-10-05 12:05 CEST — hungry: no rest regen, only drain
 # НАЗНАЧЕНИЕ: Ресурс хранения персональных данных, физических статов,
@@ -184,7 +184,7 @@ func add_skill_exp(skill_name: String, xp_amount: float) -> void:
 # ------------------------------------------------------------------------------
 # ОБРАБОТКА ВРЕМЕНИ И НУЖД
 # ------------------------------------------------------------------------------
-# hunger += hunger_rate  (всегда)
+# hunger += hunger_rate [* hunger_work_mult if work]
 # energy += work_rate | rest_rate (rest только если hunger <= thr)
 # energy += energy_drain_rate  если hunger > thr  (rest не перекрывает)
 # health += health_drain_rate  если energy < thr ИЛИ hunger > thr  (один раз)
@@ -207,6 +207,7 @@ func update_needs(delta: float, activity: String = "rest") -> void:
 
 	var max_hp: float = _cfg("max_health", 100.0)
 	var hunger_rate: float = _cfg("hunger_rate", 0.048)
+	var hunger_work_mult: float = _cfg("hunger_work_mult", 1.5)
 	var energy_work_rate: float = _cfg("energy_work_rate", -0.08)
 	var energy_rest_rate: float = _cfg("energy_rest_rate", 0.04)
 	var energy_drain_rate: float = _cfg("energy_drain_rate", -0.03)
@@ -215,8 +216,11 @@ func update_needs(delta: float, activity: String = "rest") -> void:
 	var thr_energy: float = _cfg("health_energy_threshold", 10.0)
 	var thr_hunger: float = _cfg("health_hunger_threshold", 90.0)
 
-	# 1) голод
-	hunger = clampf(hunger + hunger_rate * delta, 0.0, 100.0)
+	# 1) голод (на работе быстрее)
+	var h_add: float = hunger_rate
+	if activity == "work":
+		h_add *= hunger_work_mult
+	hunger = clampf(hunger + h_add * delta, 0.0, 100.0)
 
 	# 2) energy: work / rest
 	# При hunger > threshold rest-реген НЕ идёт (иначе +rest сильнее drain → energy=100).

@@ -56,7 +56,8 @@ directional_shadow_pancake_size = 100.0
 [node name="CameraAnchor" type="Node3D" parent="." unique_id=1779606153]
 transform = Transform3D(1, 0, 0, 0, 0.99999994, 0, 0, 0, 0.99999994, 0, 3, 22.50512)
 script = ExtResource("3_djufw")
-max_zoom = 65.0
+max_zoom = 100.0
+pitch_at_max_zoom = -75.0
 height_offset = 1.0
 bounds_min = Vector2(-90, -90)
 bounds_max = Vector2(90, 90)
