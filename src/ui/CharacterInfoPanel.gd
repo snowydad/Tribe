@@ -1,6 +1,6 @@
 # ==============================================================================
 # CharacterInfoPanel.gd — HUD: FPS + время + инфо выбранного перса
-# ОБНОВЛЕНО: 2026-10-13 — work%% + eta in speeds line
+# ОБНОВЛЕНО: 2026-10-13 — label top-left, fill panel (no vertical jump)
 # res://src/ui/CharacterInfoPanel.gd
 # ==============================================================================
 extends PanelContainer
@@ -40,6 +40,7 @@ func _process(delta: float) -> void:
 
 func _apply_top_right_layout() -> void:
 	var panel_size: Vector2 = panel_size_expanded if _selected != null else panel_size_compact
+	# якорь верх-право: верхняя кромка не ездит при смене высоты
 	anchor_left = 1.0
 	anchor_top = 0.0
 	anchor_right = 1.0
@@ -50,10 +51,15 @@ func _apply_top_right_layout() -> void:
 	offset_top = margin.y
 	offset_right = -margin.x
 	offset_bottom = margin.y + panel_size.y
+	if _label:
+		_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+		_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
 func _build_style() -> void:
 	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.08, 0.1, 0.14, 0.85)
+	style.bg_color = Color(0.08, 0.1, 0.14, 0.5)
 	style.border_color = Color(0.4, 0.75, 0.4, 0.9)
 	style.set_border_width_all(2)
 	style.set_corner_radius_all(6)
@@ -65,10 +71,16 @@ func _build_label() -> void:
 	if _label == null:
 		_label = Label.new()
 		_label.name = "HudLabel"
-		_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-		_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
-		_label.add_theme_font_size_override("font_size", 13)
 		add_child(_label)
+	# текст всегда сверху-слева; label на весь panel — не прыгает по центру
+	_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+	_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_label.autowrap_mode = TextServer.AUTOWRAP_OFF
+	_label.add_theme_font_size_override("font_size", 13)
+	_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_update_text()
 
 func _update_text() -> void:

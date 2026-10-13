@@ -1,6 +1,6 @@
 # ==============================================================================
 # storage.gd — склад WorkSite: deposit / withdraw, сытость, WP = Marker3D
-# ОБНОВЛЕНО: 2026-10-09 — cleanup
+# ОБНОВЛЕНО: 2026-10-13 — never path to storage center
 # ==============================================================================
 extends Node3D
 class_name StorageSite
@@ -252,8 +252,24 @@ func get_free_work_point(requester: Node3D = null) -> Vector3:
 			_occupied_slots[req_id] = best_i
 		return (markers[best_i] as Node3D).global_position
 
-	# нет свободных Marker — центр (лучше не доходить сюда)
-	return global_position
+	# все WP заняты — НЕ центр (navmesh/obstacle): ближайший marker или кольцо 1.2м
+	if markers.size() > 0:
+		var near_i: int = 0
+		var near_d: float = INF
+		for i in range(markers.size()):
+			var m2: Node3D = markers[i] as Node3D
+			if m2 == null:
+				continue
+			var d2: float = from.distance_to(m2.global_position)
+			if d2 < near_d:
+				near_d = d2
+				near_i = i
+		# не бронируем занятый слот — ждём у точки
+		return (markers[near_i] as Node3D).global_position
+
+	# нет Marker3D в сцене — кольцо вокруг, не origin
+	var ang: float = randf() * TAU
+	return global_position + Vector3(cos(ang), 0.0, sin(ang)) * 1.2
 
 
 func release_work_point(requester: Node3D) -> void:

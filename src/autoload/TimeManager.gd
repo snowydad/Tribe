@@ -11,7 +11,7 @@ signal day_night_cycle_updated(progress: float) # От 0.0 до 1.0 (для вр
 const SAVE_PATH: String = "user://time_data.json"
 
 # Настройки из game_config.ini
-var seconds_per_year: float = 86400.0
+var seconds_per_year: float = 43200.0	#86400.0
 var day_night_cycle_seconds: float = 900.0
 
 var current_year: int = 1
