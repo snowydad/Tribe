@@ -1,6 +1,6 @@
 # ==============================================================================
 # character.gd — FSM, nav, work, drop. Matrix → CharacterDecision.
-# ОБНОВЛЕНО: 2026-10-12 — wander y>-1, 1 try/frame (no FPS spike)
+# ОБНОВЛЕНО: 2026-10-13 — wander speed only (age later)
 # ==============================================================================
 extends CharacterBody3D
 
@@ -72,6 +72,9 @@ var drop_think_time: float = 2.0
 var wander_radius_min: float = 5.0
 var wander_radius_max: float = 15.0
 var wander_min_y: float = -1.0  # ниже — вода; y > -1 ок (по пояс)
+var wander_speed_min: float = 0.5  # доля move_speed при stroll
+var wander_speed_max: float = 0.75
+var _wander_speed_factor: float = 0.6  # rand на каждый wander
 
 var work_speed: float = 1.0
 var eat_speed: float = 1.0
@@ -117,6 +120,8 @@ func _ready() -> void:
 			wander_radius_min = float(ConfigLoader.get_character_value("base_stats", "wander_radius_min", wander_radius_min))
 			wander_radius_max = float(ConfigLoader.get_character_value("base_stats", "wander_radius_max", wander_radius_max))
 			wander_min_y = float(ConfigLoader.get_character_value("base_stats", "wander_min_y", wander_min_y))
+			wander_speed_min = float(ConfigLoader.get_character_value("base_stats", "wander_speed_min", wander_speed_min))
+			wander_speed_max = float(ConfigLoader.get_character_value("base_stats", "wander_speed_max", wander_speed_max))
 		elif ConfigLoader.has_method("get_config_value"):
 			speed = float(ConfigLoader.get_config_value("character", "base_stats", "move_speed", speed))
 			work_speed = float(ConfigLoader.get_config_value("character", "base_stats", "work_speed", work_speed))
@@ -133,6 +138,8 @@ func _ready() -> void:
 			wander_radius_min = float(ConfigLoader.get_config_value("character", "base_stats", "wander_radius_min", wander_radius_min))
 			wander_radius_max = float(ConfigLoader.get_config_value("character", "base_stats", "wander_radius_max", wander_radius_max))
 			wander_min_y = float(ConfigLoader.get_config_value("character", "base_stats", "wander_min_y", wander_min_y))
+			wander_speed_min = float(ConfigLoader.get_config_value("character", "base_stats", "wander_speed_min", wander_speed_min))
+			wander_speed_max = float(ConfigLoader.get_config_value("character", "base_stats", "wander_speed_max", wander_speed_max))
 
 	# Настройка агента и подключение RVO2 Avoidance
 	if nav_agent:
@@ -627,7 +634,7 @@ func _nav_move_direct(delta: float, goal: Vector3) -> void:
 		move_and_slide()
 		return
 	var move_dir := to / dist
-	var move_spd: float = speed * _energy_mult()
+	var move_spd: float = get_current_move_speed()
 	var vx: float = move_dir.x * move_spd
 	var vz: float = move_dir.z * move_spd
 	var step_len: float = Vector2(vx * delta, vz * delta).length()
@@ -760,7 +767,7 @@ func _process_nav_movement(delta: float) -> void:
 		return
 
 	var move_dir: Vector3 = dir / next_dist
-	var move_spd: float = speed * _energy_mult()
+	var move_spd: float = get_current_move_speed()
 	var target_vel_x: float = move_dir.x * move_spd
 	var target_vel_z: float = move_dir.z * move_spd
 	var step_len2: float = Vector2(target_vel_x * delta, target_vel_z * delta).length()
@@ -851,7 +858,7 @@ func _on_movement_finished() -> void:
 			if WorkSite.can_accept(target_harvest, self):
 				start_harvesting(target_harvest)
 				return
-			wander_nearby(10.0, 15.0)
+			wander_nearby()
 			return
 
 		if decision.hands_busy():
@@ -901,6 +908,18 @@ func _energy_mult() -> float:
 	return 1.0
 
 
+## speed * energy * (wander 0.5..0.75 if stroll). age — позже
+func get_current_move_speed() -> float:
+	var s: float = speed * _energy_mult()
+	if move_intent == "wander":
+		var wmin: float = wander_speed_min
+		var wmax: float = wander_speed_max
+		if wmax < wmin:
+			wmax = wmin
+		s *= clampf(_wander_speed_factor, wmin, wmax) if _wander_speed_factor > 0.0 else randf_range(wmin, wmax)
+	return maxf(s, 0.05)
+
+
 func _near_site(site: Node3D, mult: float = 1.0) -> bool:
 	if not site or not is_instance_valid(site):
 		return false
@@ -923,7 +942,7 @@ func _process_gathering(delta: float) -> void:
 	# Готовность — у объекта (WorkSite)
 	if not WorkSite.can_accept(target_harvest, self):
 		# не готов → wander, после прихода process_idle снова проверит
-		wander_nearby(10.0, 15.0)
+		wander_nearby()
 		return
 
 	var required_time: float = WorkSite.get_time(target_harvest, default_gather_time)
@@ -1041,7 +1060,7 @@ func _process_delivering_unload(delta: float) -> void:
 			if WorkSite.can_accept(target_harvest, self):
 				start_harvesting(target_harvest)
 			else:
-				wander_nearby(10.0, 15.0)
+				wander_nearby()
 			return
 		current_state = State.IDLE
 
@@ -1176,6 +1195,11 @@ func _begin_drop_think() -> void:
 func wander_nearby(radius_min: float = -1.0, radius_max: float = -1.0) -> void:
 	_awaiting_drop_decide = false
 	_drop_think_left = -1.0
+	var wmin: float = wander_speed_min
+	var wmax: float = wander_speed_max
+	if wmax < wmin:
+		wmax = wmin
+	_wander_speed_factor = randf_range(wmin, wmax)
 	var rmin: float = wander_radius_min if radius_min < 0.0 else radius_min
 	var rmax: float = wander_radius_max if radius_max < 0.0 else radius_max
 	if rmax < rmin:
