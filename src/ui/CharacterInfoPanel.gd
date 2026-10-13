@@ -1,6 +1,6 @@
 # ==============================================================================
 # CharacterInfoPanel.gd — HUD: FPS + время + инфо выбранного перса
-# ОБНОВЛЕНО: 2026-10-07 — action via character.get_action_label (think/wander/eat)
+# ОБНОВЛЕНО: 2026-10-13 — work%% + eta in speeds line
 # res://src/ui/CharacterInfoPanel.gd
 # ==============================================================================
 extends PanelContainer
@@ -8,7 +8,7 @@ extends PanelContainer
 @export var refresh_interval: float = 0.25
 @export var margin: Vector2 = Vector2(12, 12)
 @export var panel_size_compact: Vector2 = Vector2(200, 56)
-@export var panel_size_expanded: Vector2 = Vector2(320, 200)
+@export var panel_size_expanded: Vector2 = Vector2(360, 240)
 
 var _label: Label
 var _timer: float = 0.0
@@ -111,12 +111,13 @@ func _format_character_block() -> String:
 	var hp: float = float(d.health) if "health" in d else 0.0
 	var hunger: float = float(d.hunger) if "hunger" in d else 0.0
 	var energy: float = float(d.energy) if "energy" in d else 0.0
+	var happy: float = float(d.happiness) if "happiness" in d else 0.0
 
 	var lines: PackedStringArray = []
 	# Name. 24yrs. M. forager
 	lines.append("%s. %dyrs. %s. %s" % [name_str, age, gender_letter, talent])
-	# HP / Hunger / Energy
-	lines.append("HP:%.0f Hunger:%.0f Energy:%.0f" % [hp, hunger, energy])
+	# HP / Hunger / Energy / Happy
+	lines.append("HP:%.0f Hunger:%.0f Energy:%.0f Happy:%.0f" % [hp, hunger, energy, happy])
 	# forager:2 | worker:1 | …
 	lines.append(_format_skills_line(d))
 	# action: gather | walk | dead (starvation) | …
@@ -194,22 +195,34 @@ func _format_death_line(d) -> String:
 
 func _format_speeds_line() -> String:
 	var ch = _selected
-	var move_spd: float = float(ch.get("speed")) if ch.get("speed") != null else 0.0
-	var work_spd: float = float(ch.get("work_speed")) if ch.get("work_speed") != null else 0.0
-	# effective work speed if available (talent/skill)
-	var d = ch.get("data")
-	if d != null and d.has_method("get_effective_work_speed"):
-		# для отображения — talent или forager как типичный рабочий skill
-		var skill_key: String = "forager"
-		if "talent" in d and str(d.talent) != "":
-			skill_key = str(d.talent)
-		work_spd = float(d.get_effective_work_speed(skill_key))
+	# effective move (energy×happy×wander) + work (skill×energy×happy)
+	var move_spd: float = 0.0
+	var work_spd: float = 0.0
+	var e_m: float = 1.0
+	var h_m: float = 1.0
+	if ch.has_method("get_current_move_speed"):
+		move_spd = float(ch.get_current_move_speed())
+	elif ch.get("speed") != null:
+		move_spd = float(ch.get("speed"))
+	if ch.has_method("get_effective_work_speed_now"):
+		work_spd = float(ch.get_effective_work_speed_now())
+	elif ch.get("work_speed") != null:
+		work_spd = float(ch.get("work_speed"))
+	if ch.has_method("_energy_mult"):
+		e_m = float(ch.call("_energy_mult"))
+	if ch.has_method("_happiness_mult"):
+		h_m = float(ch.call("_happiness_mult"))
 	var vel: float = 0.0
 	if "velocity" in ch:
 		var v = ch.velocity
 		if v is Vector3:
 			vel = Vector2(v.x, v.z).length()
-	return "spd:%.1f work:%.2f vel:%.2f" % [move_spd, work_spd, vel]
+	var line := "move:%.2f work:%.2f vel:%.2f | e:%.2f h:%.2f" % [move_spd, work_spd, vel, e_m, h_m]
+	if ch.has_method("get_work_progress"):
+		var wp = ch.get_work_progress()
+		if wp is Dictionary and wp.get("active", false):
+			line += "\nwork%%:%.0f eta:%.1fs" % [float(wp.get("progress", 0.0)) * 100.0, float(wp.get("eta", 0.0))]
+	return line
 
 func _format_game_duration() -> String:
 	var total_sec: float = 0.0

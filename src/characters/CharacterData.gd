@@ -1,4 +1,4 @@
-# ОБНОВЛЕНО: 2026-10-12 — hunger_work_mult when activity=work
+# ОБНОВЛЕНО: 2026-10-13 — happiness = ((100-hunger)+energy)/2, mult like energy
 # ==============================================================================
 # ОБНОВЛЕНО: 2026-10-05 12:05 CEST — hungry: no rest regen, only drain
 # НАЗНАЧЕНИЕ: Ресурс хранения персональных данных, физических статов,
@@ -23,6 +23,7 @@ enum Gender { MALE, FEMALE }
 @export var health: float = 100.0   # 100.0 = здоров, 0.0 = смерть
 @export var hunger: float = 0.0     # 0.0 = сыт, 100.0 = умирает от голода
 @export var energy: float = 75.0    # бодрость 0..100; старт из character.ini [initial_stats] energy
+@export var happiness: float = 75.0 # 0..100; target=((100-hunger)+energy)/2
 
 # ------------------------------------------------------------------------------
 # 3. ИНВЕНТАРЬ / ПЕРЕНОСИМЫЕ РЕСУРСЫ
@@ -78,6 +79,7 @@ func load_all_stats_from_config() -> void:
 
 	health = ConfigLoader.get_character_value("base_stats", "max_health", 100.0)
 	energy = float(ConfigLoader.get_character_value("initial_stats", "energy", 75.0))
+	happiness = float(ConfigLoader.get_character_value("initial_stats", "happiness", 75.0))
 
 	var default_strength = ConfigLoader.get_character_value("initial_stats", "strength", 10)
 	var default_intelligence = ConfigLoader.get_character_value("initial_stats", "intelligence", 10)
@@ -204,6 +206,7 @@ func update_needs(delta: float, activity: String = "rest") -> void:
 	var prev_h: int = int(health)
 	var prev_g: int = int(hunger)
 	var prev_e: int = int(energy)
+	var prev_happy: int = int(happiness)
 
 	var max_hp: float = _cfg("max_health", 100.0)
 	var hunger_rate: float = _cfg("hunger_rate", 0.048)
@@ -233,6 +236,9 @@ func update_needs(delta: float, activity: String = "rest") -> void:
 	if hunger > energy_drain_hunger_thr:
 		energy = clampf(energy + energy_drain_rate * delta, 0.0, 100.0)
 
+	# 2c) happiness ← сытость + energy (формула уточним)
+	happiness = clampf(((100.0 - hunger) + energy) * 0.5, 0.0, 100.0)
+
 	# 3) health: один drain, если хотя бы одно условие
 	if energy < thr_energy or hunger > thr_hunger:
 		health = clampf(health + health_drain_rate * delta, 0.0, max_hp)
@@ -254,7 +260,7 @@ func update_needs(delta: float, activity: String = "rest") -> void:
 		data_changed.emit()
 		return
 
-	if int(health) != prev_h or int(hunger) != prev_g or int(energy) != prev_e:
+	if int(health) != prev_h or int(hunger) != prev_g or int(energy) != prev_e or int(happiness) != prev_happy:
 		data_changed.emit()
 
 ## Еда: −hunger, +energy (energy_eat_ratio)
@@ -276,6 +282,17 @@ func get_energy_speed_mult() -> float:
 	if energy <= 10.0:
 		return 0.25
 	return lerpf(0.25, 1.0, (energy - 10.0) / 65.0)
+
+
+## happiness → move/work mult (как energy, грубо)
+func get_happiness_speed_mult() -> float:
+	if happiness >= 90.0:
+		return 1.05
+	if happiness >= 70.0:
+		return 1.0
+	if happiness <= 20.0:
+		return 0.5
+	return lerpf(0.5, 1.0, (happiness - 20.0) / 50.0)
 
 func spend_energy(amount: float) -> void:
 	if amount == 0.0:

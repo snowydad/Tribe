@@ -1,6 +1,6 @@
 # ==============================================================================
 # character.gd — FSM, nav, work, drop. Matrix → CharacterDecision.
-# ОБНОВЛЕНО: 2026-10-13 — wander speed only (age later)
+# ОБНОВЛЕНО: 2026-10-13 — get_work_progress for HUD eta
 # ==============================================================================
 extends CharacterBody3D
 
@@ -909,8 +909,14 @@ func _energy_mult() -> float:
 
 
 ## speed * energy * (wander 0.5..0.75 if stroll). age — позже
+func _happiness_mult() -> float:
+	if data and data.has_method("get_happiness_speed_mult"):
+		return float(data.get_happiness_speed_mult())
+	return 1.0
+
+
 func get_current_move_speed() -> float:
-	var s: float = speed * _energy_mult()
+	var s: float = speed * _energy_mult() * _happiness_mult()
 	if move_intent == "wander":
 		var wmin: float = wander_speed_min
 		var wmax: float = wander_speed_max
@@ -919,6 +925,63 @@ func get_current_move_speed() -> float:
 		s *= clampf(_wander_speed_factor, wmin, wmax) if _wander_speed_factor > 0.0 else randf_range(wmin, wmax)
 	return maxf(s, 0.05)
 
+
+## UI: текущий work mult (skill + energy + happy)
+func get_effective_work_speed_now(skill_key: String = "") -> float:
+	var sk: String = skill_key
+	if sk == "" and target_harvest and is_instance_valid(target_harvest):
+		sk = WorkSite.get_skill(target_harvest, "")
+	if sk == "" and data:
+		sk = str(data.talent)
+	var w: float = work_speed
+	if data and data.has_method("get_effective_work_speed"):
+		w = float(data.get_effective_work_speed(sk if sk != "" else "forager"))
+	return w * _energy_mult() * _happiness_mult()
+
+
+
+## UI: прогресс работы 0..1 и eta (сек). Не в работе → -1
+func get_work_progress() -> Dictionary:
+	var out := {"active": false, "progress": 0.0, "eta": -1.0, "required": 0.0, "mult": 0.0}
+	var req: float = 0.0
+	var mult: float = get_effective_work_speed_now()
+	match current_state:
+		State.GATHERING:
+			if target_harvest and is_instance_valid(target_harvest):
+				req = WorkSite.get_time(target_harvest, default_gather_time)
+				mult = get_effective_work_speed_now(WorkSite.get_skill(target_harvest, "worker"))
+			else:
+				return out
+		State.DELIVERING:
+			if not _is_unloading_at_storage:
+				return out
+			if target_storage and is_instance_valid(target_storage):
+				req = WorkSite.get_time(target_storage, default_deposit_time)
+				mult = get_effective_work_speed_now(WorkSite.get_skill(target_storage, "worker"))
+			else:
+				return out
+		State.CLEARING:
+			if target_obstacle and is_instance_valid(target_obstacle):
+				req = WorkSite.get_time(target_obstacle, 3.0)
+				mult = get_effective_work_speed_now(WorkSite.get_skill(target_obstacle, "worker"))
+			else:
+				return out
+		State.EATING:
+			req = maxf(float(eat_speed), 0.01)
+			mult = 1.0
+		_:
+			return out
+	if req <= 0.0:
+		return out
+	var prog: float = clampf(_work_timer / req, 0.0, 1.0)
+	var left: float = maxf(req - _work_timer, 0.0)
+	var eta: float = left / maxf(mult, 0.01) if mult > 0.0 else -1.0
+	out["active"] = true
+	out["progress"] = prog
+	out["eta"] = eta
+	out["required"] = req
+	out["mult"] = mult
+	return out
 
 func _near_site(site: Node3D, mult: float = 1.0) -> bool:
 	if not site or not is_instance_valid(site):
@@ -950,7 +1013,7 @@ func _process_gathering(delta: float) -> void:
 	var current_work_speed: float = work_speed
 	if data and data.has_method("get_effective_work_speed"):
 		current_work_speed = data.get_effective_work_speed(skill_key)
-	current_work_speed *= _energy_mult()
+	current_work_speed *= _energy_mult() * _happiness_mult()
 
 	_work_timer += delta * current_work_speed
 	if _work_timer >= required_time:
@@ -1028,7 +1091,7 @@ func _process_delivering_unload(delta: float) -> void:
 	var current_work_speed: float = work_speed
 	if data and data.has_method("get_effective_work_speed"):
 		current_work_speed = data.get_effective_work_speed(skill_key)
-	current_work_speed *= _energy_mult()
+	current_work_speed *= _energy_mult() * _happiness_mult()
 
 	_work_timer += delta * current_work_speed
 	if _work_timer >= required_time:
@@ -1080,7 +1143,7 @@ func _process_clearing(delta: float) -> void:
 		if "skill" in target_obstacle:
 			skill_key = str(target_obstacle.skill)
 		current_work_speed = data.get_effective_work_speed(skill_key)
-	current_work_speed *= _energy_mult()
+	current_work_speed *= _energy_mult() * _happiness_mult()
 
 	_work_timer += delta * current_work_speed
 	if _work_timer >= required_time:
@@ -1534,13 +1597,30 @@ func _update_dev_ui() -> void:
 	var text_info = "%s (%s) [%s]%s\n" % [data.character_name, gender_str, state_str, " *SEL*" if is_selected else ""]
 	text_info += "Site: %s\n" % site_hint
 	text_info += "Talent: %s | Skill Lvl: %d\n" % [talent_str, skill_lvl]
-	text_info += "Age: %d yr | HP: %.0f | Hng: %.0f%%\n" % [data.age, data.health, data.hunger]
-	text_info += "Carrying: %s (%d) | Spd: %.1f | WSpd: %.1f\n" % [
+	text_info += "Age: %d yr | HP: %.0f | Hng: %.0f | En: %.0f | Hap: %.0f\n" % [
+		data.age, data.health, data.hunger, data.energy, data.happiness
+	]
+	text_info += "Carrying: %s (%d)\n" % [
 		data.carried_item if data.carried_item != "" else "None",
 		data.item_amount,
-		speed,
-		work_speed
 	]
-	text_info += "Vel: %.1f m/s" % velocity.length()
+	var wp: Dictionary = get_work_progress()
+	if wp.get("active", false):
+		text_info += "move:%.2f work:%.2f vel:%.2f (e:%.2f h:%.2f)\n" % [
+			get_current_move_speed(),
+			float(wp.get("mult", 0.0)),
+			Vector2(velocity.x, velocity.z).length(),
+			_energy_mult(),
+			_happiness_mult(),
+		]
+		text_info += "work%%:%.0f eta:%.1fs" % [float(wp.get("progress", 0.0)) * 100.0, float(wp.get("eta", 0.0))]
+	else:
+		text_info += "move:%.2f work:%.2f vel:%.2f (e:%.2f h:%.2f)" % [
+			get_current_move_speed(),
+			get_effective_work_speed_now(),
+			Vector2(velocity.x, velocity.z).length(),
+			_energy_mult(),
+			_happiness_mult(),
+		]
 	
 	dev_label.text = text_info
