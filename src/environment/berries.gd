@@ -1,4 +1,4 @@
-# ОБНОВЛЕНО: 2026-10-12 — die: queue_free + stub spawn near WP
+# ОБНОВЛЕНО: 2026-10-14 — die wait from AnimationTree Die timeline_length (stretch)
 # ОБНОВЛЕНО: 2026-10-09 — work_anim; nutrition из items.ini (fallback berries)
 # ОБНОВЛЕНО: 2026-10-08 — WP: nearest free Marker3D (same as storage)
 # ==============================================================================
@@ -32,6 +32,7 @@ class_name BerriesSite
 var current_berries: int = 5
 var is_ripening: bool = false
 var is_dead: bool = false
+var _dying: bool = false  # die-anim in progress
 ## Сколько полных циклов (урожай снят до 0) уже прожито
 var life_cycles_count: int = 0
 var _ripen_timer: float = 0.0
@@ -161,18 +162,170 @@ func _on_crop_emptied() -> void:
 
 
 func _die_bush() -> void:
+	if _dying:
+		return
+	_dying = true
 	is_dead = true
 	is_ripening = false
 	_ripen_timer = 0.0
 	current_berries = 0
+	# больше не interact / work (пока крутится Die)
+	if is_in_group("interactable"):
+		remove_from_group("interactable")
+	if is_in_group("berries"):
+		remove_from_group("berries")
+	if WorkSite and is_in_group(WorkSite.GROUP):
+		remove_from_group(WorkSite.GROUP)
+	var ia := get_node_or_null("InteractiveArea") as Area3D
+	if ia:
+		ia.monitoring = false
+		ia.monitorable = false
+	_update_dev_ui()
+	_update_visuals()
 	var spawn_at: Vector3 = _respawn_anchor_position()
-	print("[Berries] Bush died after %d life cycles (max=%d). remove @ %s" % [
-		life_cycles_count, life_cycles_max, str(global_position)
+	print("[Berries] Bush dying after %d cycles — play Die, then free @ %s" % [
+		life_cycles_count, str(global_position)
 	])
-	# место под будущий спавн: рядом / в рабочей точке
+	_play_die_then_free(spawn_at)
+
+
+func _find_bush_anim_player() -> AnimationPlayer:
+	var ap := get_node_or_null("berries/AnimationPlayer") as AnimationPlayer
+	if ap:
+		return ap
+	ap = get_node_or_null("AnimationPlayer") as AnimationPlayer
+	if ap:
+		return ap
+	return _find_anim_player_recursive(self)
+
+
+func _find_anim_player_recursive(n: Node) -> AnimationPlayer:
+	if n is AnimationPlayer:
+		return n as AnimationPlayer
+	for c in n.get_children():
+		var f := _find_anim_player_recursive(c)
+		if f:
+			return f
+	return null
+
+
+func _play_die_then_free(spawn_at: Vector3) -> void:
+	# Time Length + Stretch в AnimationTree (state Die) — вот это «20s», не glb length
+	var tree := get_node_or_null("berries/AnimationTree") as AnimationTree
+	if tree == null:
+		tree = get_node_or_null("AnimationTree") as AnimationTree
+	var ap := _find_bush_anim_player()
+	var die_name := _die_anim_name(ap)
+	var wait_sec: float = _get_die_timeline_length(tree, ap, die_name)
+	if tree:
+		tree.active = true
+		var pb = tree.get("parameters/playback")
+		if pb != null and pb.has_method("travel"):
+			pb.travel("Die")
+	elif ap and die_name != "":
+		ap.play(die_name)
+	await get_tree().process_frame
+	wait_sec = maxf(wait_sec, _get_die_timeline_length(tree, ap, die_name))
+	wait_sec = maxf(wait_sec, 0.3)
+	# если Stretch в tree не тянет клип — дотягиваем speed_scale (2s → 20s)
+	if ap and die_name != "" and wait_sec > 0.1:
+		var clip: float = 0.0
+		if ap.has_animation(die_name):
+			var a: Animation = ap.get_animation(die_name)
+			if a:
+				clip = a.length
+		if clip > 0.05 and wait_sec > clip * 1.05:
+			ap.speed_scale = clip / wait_sec
+	print("[Berries] Die wait %.2fs (tree timeline / clip, speed_scale=%.3f)" % [
+		wait_sec, ap.speed_scale if ap else 1.0
+	])
+	if ap and die_name != "" and ap.has_signal("animation_finished"):
+		var finished: bool = false
+		var on_fin := func(anim_name: StringName):
+			var s := str(anim_name)
+			if s == die_name or s.ends_with(die_name):
+				finished = true
+		ap.animation_finished.connect(on_fin, CONNECT_ONE_SHOT)
+		var t0: float = 0.0
+		while is_instance_valid(self) and not finished and t0 < wait_sec + 0.25:
+			await get_tree().process_frame
+			t0 += get_process_delta_time()
+		if not finished and is_instance_valid(self):
+			await get_tree().create_timer(maxf(wait_sec - t0, 0.0)).timeout
+	else:
+		await get_tree().create_timer(wait_sec).timeout
+	if not is_instance_valid(self):
+		return
+	if ap:
+		ap.speed_scale = 1.0
 	_request_respawn_near(spawn_at)
-	# объект убрать — клик = пустое место
 	queue_free()
+
+
+## AnimationTree Die: timeline_length (stretch) → иначе Animation.length
+func _get_die_timeline_length(tree: AnimationTree, ap: AnimationPlayer, die_name: String) -> float:
+	var from_tree: float = _read_tree_die_timeline(tree)
+	if from_tree > 0.05:
+		return from_tree
+	if ap:
+		if "current_animation_length" in ap and float(ap.current_animation_length) > 0.1:
+			return float(ap.current_animation_length)
+		if die_name != "" and ap.has_animation(die_name):
+			var anim: Animation = ap.get_animation(die_name)
+			if anim:
+				return maxf(anim.length, 0.1)
+	return 2.0
+
+
+func _read_tree_die_timeline(tree: AnimationTree) -> float:
+	if tree == null or tree.tree_root == null:
+		return 0.0
+	var root = tree.tree_root
+	# StateMachine → node "Die" (AnimationNodeAnimation)
+	if root is AnimationNodeStateMachine:
+		var sm := root as AnimationNodeStateMachine
+		if sm.has_method("has_node") and sm.has_node("Die"):
+			var die_n = sm.get_node("Die")
+			return _anim_node_timeline_len(die_n)
+		# fallback: walk child names
+		if sm.has_method("get_node_list"):
+			for nm in sm.get_node_list():
+				if str(nm) == "Die":
+					return _anim_node_timeline_len(sm.get_node(nm))
+	return _anim_node_timeline_len(root)
+
+
+func _anim_node_timeline_len(node) -> float:
+	if node == null:
+		return 0.0
+	# Godot 4.x AnimationNodeAnimation: timeline_length + stretch_time_scale
+	if "timeline_length" in node:
+		var tl: float = float(node.timeline_length)
+		var stretch: bool = true
+		if "stretch_time_scale" in node:
+			stretch = bool(node.stretch_time_scale)
+		elif "use_custom_timeline" in node:
+			stretch = bool(node.use_custom_timeline)
+		if stretch and tl > 0.05:
+			return tl
+		if tl > 0.05:
+			return tl
+	# generic get
+	if node.has_method("get"):
+		var tl2 = node.get("timeline_length")
+		if tl2 != null and float(tl2) > 0.05:
+			return float(tl2)
+	return 0.0
+
+
+func _die_anim_name(ap: AnimationPlayer) -> String:
+	if ap == null:
+		return ""
+	for n in ["Die", "die", "DIE"]:
+		if ap.has_animation(n):
+			return n
+	return ""
+
 
 
 ## Точка, рядом с которой потом заспавнить новый куст (WP или своя позиция)
@@ -290,6 +443,10 @@ func _find_next_free_slot_index() -> int:
 func _update_dev_ui() -> void:
 	if not dev_label:
 		return
+	if DevCheatManager and DevCheatManager.has_method("is_dev_overlays_on") and not DevCheatManager.is_dev_overlays_on():
+		dev_label.visible = false
+		return
+	dev_label.visible = true
 	var life := "∞" if life_cycles_max <= 0 else "%d/%d" % [life_cycles_count, life_cycles_max]
 	if is_dead:
 		dev_label.text = "Berries: DEAD\nCycles: %s\nWork: %s" % [life, work_type]

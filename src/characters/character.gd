@@ -1,6 +1,6 @@
 # ==============================================================================
 # character.gd — FSM, nav, work, drop. Matrix → CharacterDecision.
-# ОБНОВЛЕНО: 2026-10-13 — get_work_progress for HUD eta
+# ОБНОВЛЕНО: 2026-10-13 — _rotate_towards_target: guard freed targets
 # ==============================================================================
 extends CharacterBody3D
 
@@ -147,7 +147,10 @@ func _ready() -> void:
 		nav_agent.path_desired_distance = arrival_distance
 		nav_agent.avoidance_enabled = true
 		if "debug_enabled" in nav_agent:
-			nav_agent.debug_enabled = true
+			var on := true
+			if DevCheatManager and DevCheatManager.has_method("is_dev_overlays_on"):
+				on = bool(DevCheatManager.is_dev_overlays_on())
+			nav_agent.debug_enabled = on
 		if not nav_agent.velocity_computed.is_connected(_on_safe_velocity_computed):
 			nav_agent.velocity_computed.connect(_on_safe_velocity_computed)
 
@@ -231,7 +234,7 @@ func _physics_process(delta: float) -> void:
 			else:
 				_dampen_horizontal(delta)
 				if _pushed_t <= 0.0:
-					_rotate_towards_target(target_harvest, delta)
+					_safe_rotate_towards(target_harvest, delta)
 				_process_gathering(delta)
 				move_and_slide()
 
@@ -248,7 +251,7 @@ func _physics_process(delta: float) -> void:
 			elif _is_unloading_at_storage:
 				_dampen_horizontal(delta)
 				if _pushed_t <= 0.0:
-					_rotate_towards_target(target_storage, delta)
+					_safe_rotate_towards(target_storage, delta)
 				_process_delivering_unload(delta)
 				move_and_slide()
 			else:
@@ -260,7 +263,7 @@ func _physics_process(delta: float) -> void:
 					_work_timer = 0.0
 					_dampen_horizontal(delta)
 					if _pushed_t <= 0.0:
-						_rotate_towards_target(target_storage, delta)
+						_safe_rotate_towards(target_storage, delta)
 					_process_delivering_unload(delta)
 					move_and_slide()
 				elif target_storage and is_instance_valid(target_storage) and data and data.item_amount > 0 \
@@ -289,7 +292,7 @@ func _physics_process(delta: float) -> void:
 			else:
 				_dampen_horizontal(delta)
 				if _pushed_t <= 0.0:
-					_rotate_towards_target(target_obstacle, delta)
+					_safe_rotate_towards(target_obstacle, delta)
 				_process_clearing(delta)
 				move_and_slide()
 
@@ -798,13 +801,22 @@ func _on_safe_velocity_computed(safe_velocity: Vector3) -> void:
 		move_and_slide()
 
 ## Разворот лицом к целевому объекту
-func _rotate_towards_target(target_node: Node3D, delta: float) -> void:
-	if not target_node or not is_instance_valid(target_node):
+func _safe_rotate_towards(target_node, delta: float) -> void:
+	# не передавать freed в typed API — проверка до call
+	if target_node == null or not is_instance_valid(target_node):
+		return
+	_rotate_towards_target(target_node, delta)
+
+
+func _rotate_towards_target(target_node, delta: float) -> void:
+	if target_node == null or not is_instance_valid(target_node):
 		return
 	var dir = (target_node.global_position - global_position)
 	dir.y = 0.0
-	if dir.length_squared() > 0.01:
-		_face_dir(dir.x, dir.z, delta, 0.01)
+	if dir.length_squared() < 0.0001:
+		return
+	_face_dir(dir.x, dir.z, delta, 0.01)
+
 
 
 func _on_movement_finished() -> void:
@@ -1510,7 +1522,7 @@ func _ensure_dev_label_exists() -> void:
 		dev_label.pixel_size = 0.005
 		dev_label.modulate = Color(1.0, 1.0, 1.0)
 		add_child(dev_label)
-	dev_label.visible = true
+	_apply_dev_label_visibility()
 
 
 ## Строка action для HUD / DevLabel (think, wander, eat, walk:eat…)
@@ -1569,8 +1581,20 @@ func get_action_label() -> String:
 	return "idle"
 
 
+func _apply_dev_label_visibility() -> void:
+	if not dev_label:
+		return
+	var on := true
+	if DevCheatManager and DevCheatManager.has_method("is_dev_overlays_on"):
+		on = bool(DevCheatManager.is_dev_overlays_on())
+	dev_label.visible = on
+
+
 func _update_dev_ui() -> void:
 	if not dev_label or not data:
+		return
+	_apply_dev_label_visibility()
+	if not dev_label.visible:
 		return
 		
 	var gender_str = "M" if data.gender == CharacterData.Gender.MALE else "F"

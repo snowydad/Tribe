@@ -5,6 +5,11 @@
 
 [sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_454ov"]
 animation = &"Die"
+use_custom_timeline = true
+timeline_length = 20.0
+stretch_time_scale = true
+start_offset = 0.0
+loop_mode = 0
 
 [sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_jpmde"]
 animation = &"Wind-0"

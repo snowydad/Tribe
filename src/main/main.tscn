@@ -71,7 +71,7 @@ margin = 0.2
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 14.899951)
 fov = 45.0
 
-[node name="CameraTarget" type="MeshInstance3D" parent="CameraAnchor" unique_id=1220761795]
+[node name="DevCameraTarget" type="MeshInstance3D" parent="CameraAnchor" unique_id=1220761795]
 transform = Transform3D(1, 0, 0, 0, 0.69437253, 0.7196156, 0, -0.7196156, 0.69437253, 0, 0.004198551, 0.034011826)
 material_override = ExtResource("5_jqarl")
 mesh = SubResource("SphereMesh_csncc")
