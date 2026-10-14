@@ -1,3 +1,4 @@
+# ОБНОВЛЕНО: 2026-10-14 — stored_wood separate from food satiety
 # ==============================================================================
 # storage.gd — склад WorkSite: deposit / withdraw, сытость, WP = Marker3D
 # ОБНОВЛЕНО: 2026-10-13 — never path to storage center
@@ -7,6 +8,7 @@ class_name StorageSite
 
 ## Сытость на складе (не штуки предметов)
 @export var stored_food: int = 0
+@export var stored_wood: int = 0
 @export var max_storage: int = 500
 
 var active_work_id: String = "deposit"
@@ -110,6 +112,20 @@ func has_food() -> bool:
 	return stored_food > 0
 
 
+func has_wood() -> bool:
+	return stored_wood > 0
+
+
+func withdraw_wood(amount: int = 1) -> int:
+	if amount <= 0 or stored_wood <= 0:
+		return 0
+	var take: int = mini(amount, stored_wood)
+	stored_wood -= take
+	_update_dev_ui()
+	return take
+
+
+
 func get_meal_portion() -> int:
 	return maxi(int(round(meal_portion)), 1)
 
@@ -171,16 +187,39 @@ func do_work(worker: Node = null) -> Dictionary:
 func _do_deposit(worker: Node) -> Dictionary:
 	if worker.data.item_amount <= 0:
 		return {"ok": false, "reason": "empty_hands"}
-	if not has_space():
-		return {"ok": false, "reason": "full"}
 	var amount: int = worker.data.item_amount
 	var item: String = worker.data.carried_item if worker.data.carried_item != "" else "resource"
+	var item_id: String = item
+	if ConfigLoader and ConfigLoader.has_method("resolve_item_id"):
+		item_id = str(ConfigLoader.resolve_item_id(item))
+	# wood / non-food → отдельный счёт, не в «сытость»
+	var is_food := true
+	var mat_ids := ["wood", "log", "stone", "resource", "plank"]
+	if str(item_id).to_lower() in mat_ids or str(item).to_lower() in mat_ids:
+		is_food = false
+	elif ConfigLoader and ConfigLoader.has_method("is_item_edible"):
+		is_food = bool(ConfigLoader.is_item_edible(item_id, false))
+	if not is_food:
+		stored_wood += amount
+		worker.data.carried_item = ""
+		worker.data.item_amount = 0
+		_update_dev_ui()
+		return {
+			"ok": true,
+			"take": {"item": item_id, "amount": amount, "wood": stored_wood},
+			"xp_skill": get_work_skill(),
+			"work_type": get_work_type(),
+			"work_anim": get_work_anim(),
+		}
+	if not has_space():
+		return {"ok": false, "reason": "full"}
 	var satiety: int = _satiety_for_item(item, amount)
 	if satiety <= 0:
 		satiety = amount
 	var put: int = deposit_food(satiety)
 	worker.data.carried_item = ""
 	worker.data.item_amount = 0
+	_update_dev_ui()
 	return {
 		"ok": true,
 		"take": {"item": item, "amount": amount, "satiety": put},
@@ -290,4 +329,8 @@ func _cleanup_slots() -> void:
 func _update_dev_ui() -> void:
 	if not dev_label:
 		return
-	dev_label.text = "Satiety: %d/%d\n%s" % [stored_food, max_storage, active_work_id]
+	if DevCheatManager and DevCheatManager.has_method("is_dev_overlays_on") and not DevCheatManager.is_dev_overlays_on():
+		dev_label.visible = false
+		return
+	dev_label.visible = true
+	dev_label.text = "Food:%d/%d Wood:%d\n%s" % [stored_food, max_storage, stored_wood, active_work_id]

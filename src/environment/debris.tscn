@@ -1,0 +1,80 @@
+[gd_scene format=3 uid="uid://bqqx8dbr4j38b"]
+
+[ext_resource type="Script" uid="uid://bmx8igbtpu0e7" path="res://src/environment/debris.gd" id="1_script"]
+[ext_resource type="Material" uid="uid://ck5o04nlff80n" path="res://assets/models/M_Ground.tres" id="2_mat"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_pile"]
+size = Vector3(1.2, 0.8, 1.2)
+
+[sub_resource type="BoxShape3D" id="BoxShape_body"]
+size = Vector3(1.2, 0.8, 1.2)
+
+[sub_resource type="CylinderShape3D" id="CylShape_interact"]
+height = 1.0
+radius = 1.6
+
+[sub_resource type="SphereMesh" id="SphereMesh_dev"]
+radius = 0.08
+height = 0.16
+
+[node name="Debris" type="Node3D" unique_id=1679283341]
+script = ExtResource("1_script")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="." unique_id=1078270669]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.4, 0)
+material_override = ExtResource("2_mat")
+mesh = SubResource("BoxMesh_pile")
+
+[node name="StaticBody3D" type="StaticBody3D" parent="." unique_id=1239863468]
+collision_layer = 4
+collision_mask = 0
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="StaticBody3D" unique_id=657105482]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.4, 0)
+shape = SubResource("BoxShape_body")
+
+[node name="InteractiveArea" type="Area3D" parent="." unique_id=1242211449]
+collision_layer = 4
+collision_mask = 0
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="InteractiveArea" unique_id=1706749768]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.4, 0)
+shape = SubResource("CylShape_interact")
+
+[node name="WorkPoints" type="Node3D" parent="." unique_id=1777575314]
+
+[node name="Marker3D_N" type="Marker3D" parent="WorkPoints" unique_id=174425557]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -1.4)
+
+[node name="Marker3D_S" type="Marker3D" parent="WorkPoints" unique_id=348406528]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1.4)
+
+[node name="Marker3D_E" type="Marker3D" parent="WorkPoints" unique_id=684748255]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.4, 0, 0)
+
+[node name="Marker3D_W" type="Marker3D" parent="WorkPoints" unique_id=772356225]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.4, 0, 0)
+
+[node name="DevLabel" type="Label3D" parent="." unique_id=918268806]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.4, 0)
+billboard = 1
+text = "Debris"
+
+[node name="NavigationObstacle3D" type="NavigationObstacle3D" parent="." unique_id=1779205348]
+radius = 0.8
+
+[node name="Dev" type="MeshInstance3D" parent="." unique_id=912935457]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.1, -1.4)
+mesh = SubResource("SphereMesh_dev")
+
+[node name="Dev2" type="MeshInstance3D" parent="." unique_id=920463671]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.4, 0.1, 0)
+mesh = SubResource("SphereMesh_dev")
+
+[node name="Dev3" type="MeshInstance3D" parent="." unique_id=233331122]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.1, 1.4)
+mesh = SubResource("SphereMesh_dev")
+
+[node name="Dev4" type="MeshInstance3D" parent="." unique_id=825628066]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.4, 0.1, 0)
+mesh = SubResource("SphereMesh_dev")

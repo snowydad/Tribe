@@ -59,7 +59,7 @@ func _apply_top_right_layout() -> void:
 
 func _build_style() -> void:
 	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.08, 0.1, 0.14, 0.5)
+	style.bg_color = Color(0.08, 0.1, 0.14, 0.85)
 	style.border_color = Color(0.4, 0.75, 0.4, 0.9)
 	style.set_border_width_all(2)
 	style.set_corner_radius_all(6)
@@ -134,6 +134,13 @@ func _format_character_block() -> String:
 	lines.append(_format_skills_line(d))
 	# action: gather | walk | dead (starvation) | …
 	lines.append("action: %s" % _format_current_action())
+	# cargo in hands
+	var carry_item: String = str(d.carried_item) if "carried_item" in d else ""
+	var carry_amt: int = int(d.item_amount) if "item_amount" in d else 0
+	if carry_amt > 0 and carry_item != "":
+		lines.append("Carry: %s x%d" % [carry_item, carry_amt])
+	else:
+		lines.append("Carry: -")
 	var death_line := _format_death_line(d)
 	if death_line != "":
 		lines.append(death_line)

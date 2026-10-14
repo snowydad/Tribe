@@ -12,6 +12,8 @@
 [ext_resource type="PackedScene" uid="uid://cxbpv8trxi8g7" path="res://src/environment/berries.tscn" id="9_2nke2"]
 [ext_resource type="PackedScene" uid="uid://dmn7620t3d78t" path="res://src/environment/dev_obstacle.tscn" id="10_km7bn"]
 [ext_resource type="Script" uid="uid://503ly4ypns80" path="res://src/ui/CharacterInfoPanel.gd" id="11_erw1m"]
+[ext_resource type="PackedScene" uid="uid://bqqx8dbr4j38b" path="res://src/environment/debris.tscn" id="13_ibsor"]
+[ext_resource type="PackedScene" path="res://src/environment/campfire.tscn" id="14_hc2u7"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_frqgp"]
 
@@ -24,6 +26,11 @@ sky = SubResource("Sky_jqarl")
 ambient_light_source = 3
 ambient_light_color = Color(0.24705882, 0.42352942, 1, 1)
 tonemap_mode = 2
+fog_light_color = Color(0.73, 0.9325, 1, 1)
+fog_density = 0.046
+fog_aerial_perspective = 0.195
+fog_sky_affect = 0.82
+fog_height_density = 16.0
 
 [sub_resource type="SphereShape3D" id="SphereShape3D_jqarl"]
 
@@ -130,3 +137,9 @@ offset_left = -40.0
 offset_bottom = 40.0
 grow_horizontal = 0
 script = ExtResource("11_erw1m")
+
+[node name="Debris" parent="." unique_id=1474345084 instance=ExtResource("13_ibsor")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5.411136, 1.3161111, 17.174911)
+
+[node name="Campfire" parent="." unique_id=743318931 instance=ExtResource("14_hc2u7")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.5540747, 1.5754921, 30.798878)

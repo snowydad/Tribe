@@ -78,7 +78,7 @@ static func get_category(node: Node) -> String:
 	match t:
 		"foraging", "harvest", "gather", "mine", "chop":
 			return "harvest"
-		"delivering", "deposit", "store", "unload":
+		"delivering", "deposit", "store", "unload", "fueling", "stoking":
 			return "deposit"
 		"clear", "clearing", "demolish":
 			return "clear"
@@ -87,6 +87,8 @@ static func get_category(node: Node) -> String:
 		_:
 			# эвристики по старым API
 			if node and (node.has_method("deposit_food") or node.is_in_group("storage")):
+				return "deposit"
+			if node and (node.is_in_group("campfire") or node.has_method("needs_fuel")):
 				return "deposit"
 			if node and (node.has_method("clear_obstacle") or node.is_in_group("obstacle")):
 				return "clear"

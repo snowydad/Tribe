@@ -1,6 +1,6 @@
 # ==============================================================================
 # character.gd — FSM, nav, work, drop. Matrix → CharacterDecision.
-# ОБНОВЛЕНО: 2026-10-13 — _rotate_towards_target: guard freed targets
+# ОБНОВЛЕНО: 2026-10-14 — campfire stoking (wood fuel)
 # ==============================================================================
 extends CharacterBody3D
 
@@ -36,6 +36,7 @@ var is_being_dragged: bool = false
 var target_harvest: Node3D = null  # любой WorkSite category harvest
 var target_storage: Node3D = null
 var target_obstacle: Node3D = null
+var target_campfire: Node3D = null
 
 var _current_target_pos: Vector3 = Vector3.ZERO
 var _work_timer: float = 0.0
@@ -251,28 +252,42 @@ func _physics_process(delta: float) -> void:
 			elif _is_unloading_at_storage:
 				_dampen_horizontal(delta)
 				if _pushed_t <= 0.0:
-					_safe_rotate_towards(target_storage, delta)
+					var look = target_campfire if (target_campfire and decision and decision.want_stoking) else target_storage
+					_safe_rotate_towards(look, delta)
 				_process_delivering_unload(delta)
 				move_and_slide()
 			else:
-				if target_storage and is_instance_valid(target_storage) and target_storage.has_method("set_active_work"):
-					target_storage.set_active_work("deposit")
-				if target_storage and is_instance_valid(target_storage) and data and data.item_amount > 0 \
-						and _at_work_point(target_storage) and WorkSite.can_accept(target_storage, self):
-					_is_unloading_at_storage = true
-					_work_timer = 0.0
-					_dampen_horizontal(delta)
-					if _pushed_t <= 0.0:
-						_safe_rotate_towards(target_storage, delta)
-					_process_delivering_unload(delta)
-					move_and_slide()
-				elif target_storage and is_instance_valid(target_storage) and data and data.item_amount > 0 \
-						and not WorkSite.can_accept(target_storage, self):
-					if decision.handle_full_storage_with_cargo():
+				# костёр: wood dump
+				if target_campfire and is_instance_valid(target_campfire) and decision and decision.want_stoking \
+						and data and data.item_amount > 0:
+					if _at_work_point(target_campfire):
+						_is_unloading_at_storage = true
+						_work_timer = 0.0
+						_dampen_horizontal(delta)
+						_safe_rotate_towards(target_campfire, delta)
+						_process_delivering_unload(delta)
 						move_and_slide()
 					else:
-						current_state = State.IDLE
+						_process_nav_movement(delta)
+				elif target_storage and is_instance_valid(target_storage) and target_storage.has_method("set_active_work"):
+					target_storage.set_active_work("deposit")
+					if data and data.item_amount > 0 \
+							and _at_work_point(target_storage) and WorkSite.can_accept(target_storage, self):
+						_is_unloading_at_storage = true
+						_work_timer = 0.0
+						_dampen_horizontal(delta)
+						if _pushed_t <= 0.0:
+							_safe_rotate_towards(target_storage, delta)
+						_process_delivering_unload(delta)
 						move_and_slide()
+					elif data and data.item_amount > 0 and not WorkSite.can_accept(target_storage, self):
+						if decision.handle_full_storage_with_cargo():
+							move_and_slide()
+						else:
+							current_state = State.IDLE
+							move_and_slide()
+					else:
+						_process_nav_movement(delta)
 				else:
 					_process_nav_movement(delta)
 
@@ -833,17 +848,40 @@ func _on_movement_finished() -> void:
 			_begin_drop_think()
 			return
 
-		if decision.want_storage_meal and target_storage and is_instance_valid(target_storage):
-			# soft arrive: у WP или рядом со складом
+		if decision and decision.want_storage_meal and target_storage and is_instance_valid(target_storage):
 			if _at_work_point(target_storage) or _near_site(target_storage):
 				if decision.withdraw_one_and_eat(target_storage):
 					return
 				decision.want_storage_meal = false
 				current_state = State.IDLE
 				return
-			# still far — re-path meal
 			decision.go_eat_from_storage()
 			return
+
+		# stoking: забрать wood со склада
+		if decision and decision.want_stoking and target_storage and is_instance_valid(target_storage):
+			if _at_work_point(target_storage) or _near_site(target_storage):
+				var fire = decision.stoking_target if decision.stoking_target else target_campfire
+				if _try_pickup_wood_at_storage(target_storage):
+					if fire and is_instance_valid(fire):
+						start_stoking(fire)
+						return
+				if fire and is_instance_valid(fire):
+					start_stoking(fire)
+				else:
+					current_state = State.IDLE
+				return
+
+		# stoking: дошли до костра с wood
+		if decision and decision.want_stoking and target_campfire and is_instance_valid(target_campfire):
+			if _at_work_point(target_campfire) or _near_site(target_campfire):
+				if data and data.item_amount > 0:
+					_is_unloading_at_storage = true
+					_work_timer = 0.0
+					current_state = State.DELIVERING
+					return
+				start_stoking(target_campfire)
+				return
 
 		if task_manager and task_manager.get_current_task():
 			var cur_t = task_manager.get_current_task()
@@ -853,13 +891,15 @@ func _on_movement_finished() -> void:
 				start_harvesting(cur_t.target_node)
 				return
 			elif cur_t and cur_t.type == TaskManager.TaskType.DELIVER and cur_t.target_node:
-				start_delivering_to_storage(cur_t.target_node)
+				if cur_t.target_node.is_in_group("campfire") or cur_t.target_node.has_method("needs_fuel"):
+					start_stoking(cur_t.target_node)
+				else:
+					start_delivering_to_storage(cur_t.target_node)
 				return
 			elif cur_t and cur_t.type == TaskManager.TaskType.CLEAR and cur_t.target_node:
 				start_clearing_obstacle(cur_t.target_node)
 				return
 
-		# go_work: дошли до WP текущего site
 		if target_storage and is_instance_valid(target_storage) and _at_work_point(target_storage):
 			if WorkSite.can_accept(target_storage, self):
 				start_delivering_to_storage(target_storage)
@@ -873,13 +913,22 @@ func _on_movement_finished() -> void:
 			wander_nearby()
 			return
 
-		if decision.hands_busy():
+		if decision and decision.hands_busy():
 			decision.resolve_cargo_action()
 			return
 
 		current_state = State.IDLE
 
 	elif current_state == State.DELIVERING:
+		if target_campfire and is_instance_valid(target_campfire) and decision and decision.want_stoking:
+			if data and data.item_amount > 0 and _at_work_point(target_campfire):
+				_is_unloading_at_storage = true
+				_work_timer = 0.0
+			elif data and data.item_amount > 0:
+				_nav_go_to(_get_free_work_point_safe(target_campfire))
+			else:
+				start_stoking(target_campfire)
+			return
 		if target_storage and is_instance_valid(target_storage) and target_storage.has_method("set_active_work"):
 			target_storage.set_active_work("deposit")
 		if target_storage and is_instance_valid(target_storage) and data and data.item_amount > 0:
@@ -894,6 +943,7 @@ func _on_movement_finished() -> void:
 			_is_unloading_at_storage = false
 			target_storage = null
 			current_state = State.IDLE
+
 
 func _stop_horizontal_movement(delta: float) -> void:
 	velocity.x = move_toward(velocity.x, 0.0, speed * delta * 10.0)
@@ -1087,6 +1137,10 @@ func _nutrition_for_carried() -> float:
 
 
 func _process_delivering_unload(delta: float) -> void:
+	# Campfire stoke unload
+	if target_campfire and is_instance_valid(target_campfire) and (decision and decision.want_stoking):
+		_process_stoking_unload(delta)
+		return
 	# deposit: только WorkSite API (do_work на site)
 	if not target_storage or not is_instance_valid(target_storage):
 		_is_unloading_at_storage = false
@@ -1138,6 +1192,63 @@ func _process_delivering_unload(delta: float) -> void:
 				wander_nearby()
 			return
 		current_state = State.IDLE
+
+
+func _process_stoking_unload(delta: float) -> void:
+	var fire: Node3D = target_campfire
+	if not fire or not is_instance_valid(fire):
+		_is_unloading_at_storage = false
+		if decision:
+			decision.want_stoking = false
+		current_state = State.IDLE
+		return
+	if not data or data.item_amount <= 0:
+		# нужно ещё wood?
+		if fire.has_method("needs_fuel") and fire.needs_fuel():
+			start_stoking(fire)
+		else:
+			_is_unloading_at_storage = false
+			if decision:
+				decision.want_stoking = false
+				decision.stoking_target = null
+			target_campfire = null
+			current_state = State.IDLE
+		return
+	if not _at_work_point(fire):
+		_nav_go_to(_get_free_work_point_safe(fire))
+		current_state = State.MOVING
+		return
+	var req: float = WorkSite.get_time(fire, 1.0)
+	var mult: float = work_speed * _energy_mult() * _happiness_mult()
+	_work_timer += delta * mult
+	if _work_timer < req:
+		return
+	_work_timer = 0.0
+	var result: Dictionary = WorkSite.do_work(fire, self)
+	if result.get("ok", false):
+		var sk: String = str(result.get("xp_skill", "worker"))
+		var xp: float = WorkSite.xp_from_config()
+		if data.has_method("add_skill_xp"):
+			data.add_skill_xp(sk, xp)
+		elif data.has_method("add_skill_exp"):
+			data.add_skill_exp(sk, xp)
+	# ещё нужно?
+	if fire.has_method("needs_fuel") and fire.needs_fuel():
+		if data.item_amount > 0 and str(data.carried_item).to_lower() in ["wood", "log"]:
+			return  # next cycle same unload
+		start_stoking(fire)
+		return
+	_is_unloading_at_storage = false
+	if decision:
+		decision.want_stoking = false
+		decision.stoking_target = null
+	target_campfire = null
+	if fire.has_method("release_work_point"):
+		fire.release_work_point(self)
+	if task_manager:
+		task_manager.complete_current_task()
+	current_state = State.IDLE
+
 
 func _process_clearing(delta: float) -> void:
 	if not target_obstacle or not is_instance_valid(target_obstacle):
@@ -1317,7 +1428,10 @@ func start_work_at(site: Node3D) -> void:
 		"harvest":
 			start_harvesting(site)
 		"deposit":
-			start_delivering_to_storage(site)
+			if site.is_in_group("campfire") or (site.has_method("needs_fuel") and site.has_method("add_wood")):
+				start_stoking(site)
+			else:
+				start_delivering_to_storage(site)
 		"clear":
 			start_clearing_obstacle(site)
 		"build":
@@ -1445,6 +1559,113 @@ func start_delivering_to_storage(storage_node: Node3D) -> void:
 	else:
 		current_state = State.DELIVERING
 		_nav_go_to(_current_target_pos)
+
+
+
+## Костёр: wood в руках → WP → deposit; иначе склад wood / debris → снова сюда
+func start_stoking(fire: Node3D) -> void:
+	if not fire or not is_instance_valid(fire):
+		return
+	target_campfire = fire
+	if decision:
+		decision.want_stoking = true
+		decision.stoking_target = fire
+	is_being_dragged = false
+	_is_unloading_at_storage = false
+	_awaiting_drop_decide = false
+	_work_timer = 0.0
+	# уже есть wood
+	if data and data.item_amount > 0 and str(data.carried_item).to_lower() in ["wood", "log"]:
+		_release_all_work_points()
+		_current_target_pos = _get_free_work_point_safe(fire)
+		move_intent = "deliver"
+		if _at_work_point(fire) and is_on_floor():
+			current_state = State.DELIVERING
+			_is_unloading_at_storage = true  # reuse unload timer path → specialized below
+		else:
+			current_state = State.MOVING
+			_nav_go_to(_current_target_pos)
+		if task_manager:
+			task_manager.set_user_override_task(TaskManager.Task.new(TaskManager.TaskType.DELIVER, Vector3.ZERO, fire, 20, true))
+		return
+	# нет wood — склад приоритет
+	var st := _find_storage_with_wood()
+	if st:
+		target_storage = st
+		_current_target_pos = _get_free_work_point_safe(st)
+		move_intent = "work"
+		current_state = State.MOVING
+		_nav_go_to(_current_target_pos)
+		if task_manager:
+			task_manager.set_user_override_task(TaskManager.Task.new(TaskManager.TaskType.MOVE_TO, _current_target_pos, st, 30, false))
+		return
+	# завал
+	var deb := _find_nearest_debris()
+	if deb:
+		start_harvesting(deb)
+		return
+	# нечего нести
+	if decision:
+		decision.want_stoking = false
+		decision.stoking_target = null
+	current_state = State.IDLE
+	print("[Character] stoking: no wood source")
+
+
+func _find_storage_with_wood() -> Node3D:
+	var best: Node3D = null
+	var best_d: float = INF
+	for n in get_tree().get_nodes_in_group("storage"):
+		if not is_instance_valid(n):
+			continue
+		var has := false
+		if n.has_method("has_wood"):
+			has = bool(n.has_wood())
+		elif "stored_wood" in n:
+			has = int(n.stored_wood) > 0
+		if not has:
+			continue
+		var d: float = global_position.distance_to(n.global_position)
+		if d < best_d:
+			best_d = d
+			best = n as Node3D
+	return best
+
+
+func _find_nearest_debris() -> Node3D:
+	var best: Node3D = null
+	var best_d: float = INF
+	for g in ["debris", "obstacle"]:
+		for n in get_tree().get_nodes_in_group(g):
+			if not is_instance_valid(n):
+				continue
+			if not WorkSite.can_accept(n, self):
+				continue
+			var d: float = global_position.distance_to(n.global_position)
+			if d < best_d:
+				best_d = d
+				best = n as Node3D
+	return best
+
+
+func _try_pickup_wood_at_storage(st: Node3D) -> bool:
+	if not st or not is_instance_valid(st) or not data:
+		return false
+	if data.item_amount > 0:
+		return str(data.carried_item).to_lower() in ["wood", "log"]
+	var got: int = 0
+	if st.has_method("withdraw_wood"):
+		got = int(st.withdraw_wood(1))
+	elif "stored_wood" in st and int(st.stored_wood) > 0:
+		st.stored_wood -= 1
+		got = 1
+		if st.has_method("_update_dev_ui"):
+			st._update_dev_ui()
+	if got > 0:
+		data.carried_item = "wood"
+		data.item_amount = got
+		return true
+	return false
 
 
 func _go_to_site_wp(site: Node3D) -> void:

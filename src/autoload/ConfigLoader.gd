@@ -23,6 +23,8 @@ var _aliases: Dictionary = {
 	"berries": "berries",
 	"storage": "storage",
 	"obstacle": "obstacle",
+	"debris": "debris",
+	"campfire": "campfire",
 	"shelter": "shelter",
 	"names": "names",
 	"items": "items"
@@ -59,7 +61,9 @@ func load_all_configs() -> void:
 		"game_config": "res://assets/config/game_config.ini",
 		"berries": "res://assets/config/berries.ini",
 		"storage": "res://assets/config/storage.ini",
-		"obstacle": "res://assets/config/obstacle.ini",
+		"obstacle": "res://assets/config/debris.ini",
+		"debris": "res://assets/config/debris.ini",
+		"campfire": "res://assets/config/campfire.ini",
 		"shelter": "res://assets/config/shelter.ini",
 		"names": "res://assets/config/names.ini"
 	}
@@ -135,7 +139,7 @@ func get_section_keys(config_name: String, section: String) -> PackedStringArray
 
 ## Универсальный метод сквозного поиска по базовым конфигам (для TimeManager и др.)
 func get_value(section: String, key: String, default_value: Variant = null) -> Variant:
-	var search_order = ["game_config", "character", "character_skills", "items", "berries", "storage", "obstacle", "shelter"]
+	var search_order = ["game_config", "character", "character_skills", "items", "berries", "storage", "debris", "obstacle", "campfire", "shelter"]
 	for cfg_name in search_order:
 		var cfg = get_config_file(cfg_name)
 		if cfg and cfg.has_section_key(section, key):
@@ -164,7 +168,16 @@ func get_storage_value(section: String, key: String, default_value: Variant = nu
 
 ## Получение значений из obstacle.ini
 func get_obstacle_value(section: String, key: String, default_value: Variant = null) -> Variant:
-	return get_config_value("obstacle", section, key, default_value)
+	# alias → debris.ini
+	return get_config_value("debris", section, key, default_value)
+
+
+func get_debris_value(section: String, key: String, default_value: Variant = null) -> Variant:
+	return get_config_value("debris", section, key, default_value)
+
+
+func get_campfire_value(section: String, key: String, default_value: Variant = null) -> Variant:
+	return get_config_value("campfire", section, key, default_value)
 
 ## Получение значений из shelter.ini
 func get_shelter_value(section: String, key: String, default_value: Variant = null) -> Variant:

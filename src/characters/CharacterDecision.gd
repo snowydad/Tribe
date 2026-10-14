@@ -1,6 +1,6 @@
 # ==============================================================================
 # CharacterDecision.gd — решения (eat / deliver / harvest / drop). Движение — host.
-# ОБНОВЛЕНО: 2026-10-12 — idle wander when !has_tasks + rest (step 2)
+# ОБНОВЛЕНО: 2026-10-14 — stoking campfire
 # ==============================================================================
 class_name CharacterDecision
 extends RefCounted
@@ -10,6 +10,8 @@ var host: CharacterBody3D
 var cargo_drop_delay: float = 30.0
 var _cargo_drop_timer: float = 0.0
 var want_storage_meal: bool = false
+var want_stoking: bool = false
+var stoking_target: Node = null
 var _idle_check_timer: float = 0.0
 # idle wander (ini: base_stats)
 var idle_wander_delay: float = 3.0
@@ -283,6 +285,12 @@ func resolve_cargo_action() -> void:
 		promote_eat_task()
 		execute_eat_task()
 		return
+	# wood → костёр, если stoking
+	if want_stoking and stoking_target and is_instance_valid(stoking_target):
+		var item := str(_data().carried_item).to_lower() if _data() else ""
+		if item in ["wood", "log"]:
+			host.start_stoking(stoking_target)
+			return
 	if should_deliver():
 		var nearest_st = host._find_nearest_storage_node()
 		var tm = _tm()
@@ -440,7 +448,10 @@ func resolve_after_drop(drop_site: Node3D = null) -> void:
 	# 0) cargo → deliver
 	if hands_busy():
 		if drop_site and is_instance_valid(drop_site) and WorkSite.get_category(drop_site) == "deposit":
-			host.start_delivering_to_storage(drop_site)
+			if drop_site.is_in_group("campfire") or drop_site.has_method("needs_fuel"):
+				host.start_stoking(drop_site)
+			else:
+				host.start_delivering_to_storage(drop_site)
 			return
 		if tm and tm.has_tasks():
 			var cur = tm.get_current_task()
