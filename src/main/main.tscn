@@ -5,6 +5,7 @@
 [ext_resource type="PackedScene" uid="uid://cdh370sbee1wm" path="res://src/characters/character.tscn" id="2_ab7mr"]
 [ext_resource type="Script" uid="uid://221kfc7owpk" path="res://src/main/PlayerInputManager.gd" id="2_jkpqq"]
 [ext_resource type="Script" uid="uid://d28827n4sjcwa" path="res://src/main/camera_3d.gd" id="3_djufw"]
+[ext_resource type="Script" uid="uid://bp2s846mkwqe0" path="res://src/main/SunPivot.gd" id="4_4tqcc"]
 [ext_resource type="Material" uid="uid://ci6tdoqvoe6o0" path="res://assets/materials/M_CameraTarget.tres" id="5_jqarl"]
 [ext_resource type="Material" uid="uid://ck5o04nlff80n" path="res://assets/models/M_Ground.tres" id="7_30cu5"]
 [ext_resource type="Material" uid="uid://d10jepq2kf0id" path="res://assets/materials/test.tres" id="7_w0wra"]
@@ -58,8 +59,11 @@ camera = NodePath("../CameraAnchor/SpringArm3D/Camera3D")
 [node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=695704487]
 environment = SubResource("Environment_jkpqq")
 
-[node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=2056928374]
-transform = Transform3D(0.70710677, -0.49999997, 0.49999997, 0, 0.70710677, 0.70710677, -0.70710677, -0.49999997, 0.49999997, 0, 25.053116, 16.011642)
+[node name="SunPivot" type="Node3D" parent="." unique_id=65750426]
+script = ExtResource("4_4tqcc")
+
+[node name="Sun" type="DirectionalLight3D" parent="SunPivot" unique_id=2056928374]
+transform = Transform3D(0.70710677, -0.50000006, 0.49999994, 0, 0.70710665, 0.7071069, -0.70710677, -0.50000006, 0.49999994, 0, 25.053116, 16.011642)
 shadow_enabled = true
 shadow_opacity = 0.9
 shadow_blur = 0.01

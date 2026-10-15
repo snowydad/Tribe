@@ -12,7 +12,7 @@ const SAVE_PATH: String = "user://time_data.json"
 
 # Настройки из game_config.ini
 var seconds_per_year: float = 43200.0	#86400.0
-var day_night_cycle_seconds: float = 900.0
+var day_night_cycle_seconds: float = 1800.0
 
 var current_year: int = 1
 
@@ -22,7 +22,7 @@ var _day_night_timer: float = 0.0
 func _ready() -> void:
 	# 1. Читаем параметры из секции [time_settings]
 	seconds_per_year = ConfigLoader.get_value("time_settings", "seconds_per_year", 86400.0)
-	day_night_cycle_seconds = ConfigLoader.get_value("time_settings", "day_night_cycle_seconds", 900.0)
+	day_night_cycle_seconds = ConfigLoader.get_value("time_settings", "day_night_cycle_seconds", 1800.0)
 	
 	print("[TimeManager] Time initialized. 1 Year = ", seconds_per_year, "s | Day/Night cycle = ", day_night_cycle_seconds, "s")
 	
