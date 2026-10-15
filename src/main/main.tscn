@@ -13,9 +13,12 @@
 [ext_resource type="PackedScene" uid="uid://dmn7620t3d78t" path="res://src/environment/dev_obstacle.tscn" id="10_km7bn"]
 [ext_resource type="Script" uid="uid://503ly4ypns80" path="res://src/ui/CharacterInfoPanel.gd" id="11_erw1m"]
 [ext_resource type="PackedScene" uid="uid://bqqx8dbr4j38b" path="res://src/environment/debris.tscn" id="13_ibsor"]
-[ext_resource type="PackedScene" path="res://src/environment/campfire.tscn" id="14_hc2u7"]
+[ext_resource type="PackedScene" uid="uid://0j333howo578" path="res://src/environment/campfire.tscn" id="14_hc2u7"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_frqgp"]
+sky_top_color = Color(0.4618634, 0.53608686, 0.6351234, 1)
+ground_bottom_color = Color(0.64705884, 0.654902, 0.67058825, 1)
+ground_horizon_color = Color(0.64705884, 0.654902, 0.67058825, 1)
 
 [sub_resource type="Sky" id="Sky_jqarl"]
 sky_material = SubResource("ProceduralSkyMaterial_frqgp")
@@ -24,7 +27,7 @@ sky_material = SubResource("ProceduralSkyMaterial_frqgp")
 background_mode = 2
 sky = SubResource("Sky_jqarl")
 ambient_light_source = 3
-ambient_light_color = Color(0.24705882, 0.42352942, 1, 1)
+ambient_light_color = Color(0, 0.8166666, 1, 1)
 tonemap_mode = 2
 fog_light_color = Color(0.73, 0.9325, 1, 1)
 fog_density = 0.046
@@ -58,6 +61,8 @@ environment = SubResource("Environment_jkpqq")
 [node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=2056928374]
 transform = Transform3D(0.70710677, -0.49999997, 0.49999997, 0, 0.70710677, 0.70710677, -0.70710677, -0.49999997, 0.49999997, 0, 25.053116, 16.011642)
 shadow_enabled = true
+shadow_opacity = 0.9
+shadow_blur = 0.01
 directional_shadow_pancake_size = 100.0
 
 [node name="CameraAnchor" type="Node3D" parent="." unique_id=1779606153]
@@ -84,7 +89,7 @@ material_override = ExtResource("5_jqarl")
 mesh = SubResource("SphereMesh_csncc")
 
 [node name="Character" parent="." unique_id=682575563 instance=ExtResource("2_ab7mr")]
-transform = Transform3D(0.9987056, 0, -0.05086355, 0, 1, 0, 0.05086355, 0, 0.9987056, 0, 2.620082, 9.29436)
+transform = Transform3D(-0.97678876, 0, -0.21420497, 0, 1, 0, 0.21420497, 0, -0.97678876, 0, 2.620082, 9.29436)
 
 [node name="Character2" parent="." unique_id=1713816478 instance=ExtResource("2_ab7mr")]
 transform = Transform3D(0.9987056, 0, -0.05086355, 0, 1, 0, 0.05086355, 0, 0.9987056, 6.6310062, 2.620082, 9.29436)

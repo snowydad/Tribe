@@ -24,15 +24,26 @@ script = ExtResource("1_script")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.12, 0)
 mesh = SubResource("CylMesh")
 
+[node name="DevGround" type="MeshInstance3D" parent="." unique_id=337177736]
+transform = Transform3D(3, 0, 0, 0, 3, 0, 0, 0, 3, 0, -0.38195312, 0)
+mesh = SubResource("CylMesh")
+
+[node name="AreaLight3D" type="AreaLight3D" parent="." unique_id=249761005]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.71313477, 0)
+visible = false
+light_color = Color(1, 0.6166667, 0, 1)
+light_energy = 2.0
+shadow_enabled = true
+shadow_blur = 10.0
+
 [node name="FireLight" type="OmniLight3D" parent="." unique_id=325432709]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.6, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
 light_color = Color(1, 0.55, 0.2, 1)
-light_energy = 5.0
-light_size = 0.2
+light_energy = 2.0
 shadow_enabled = true
 shadow_opacity = 0.52
-shadow_blur = 0.0
-omni_range = 8.0
+shadow_blur = 10.0
+omni_range = 10.0
 
 [node name="StaticBody3D" type="StaticBody3D" parent="." unique_id=1467434201]
 collision_layer = 4
