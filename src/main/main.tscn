@@ -69,6 +69,10 @@ shadow_opacity = 0.9
 shadow_blur = 0.01
 directional_shadow_pancake_size = 100.0
 
+[node name="Devpole" type="CSGBox3D" parent="SunPivot" unique_id=111752427]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 13.405277, 0)
+size = Vector3(1, 22.5542, 1)
+
 [node name="CameraAnchor" type="Node3D" parent="." unique_id=1779606153]
 transform = Transform3D(1, 0, 0, 0, 0.99999994, 0, 0, 0, 0.99999994, 0, 3, 22.50512)
 script = ExtResource("3_djufw")
