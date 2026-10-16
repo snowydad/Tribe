@@ -814,6 +814,10 @@ func _on_safe_velocity_computed(safe_velocity: Vector3) -> void:
 		var vel_2d = Vector2(safe_velocity.x, safe_velocity.z)
 		_face_dir(vel_2d.x, vel_2d.y, get_physics_process_delta_time(), 0.4)
 		move_and_slide()
+	else:
+		# Другие состояния: колбэк пришёл, но state уже сменился —
+		# всё равно вызываем move_and_slide чтобы гравитация не подвисла
+		move_and_slide()
 
 ## Разворот лицом к целевому объекту
 func _safe_rotate_towards(target_node, delta: float) -> void:
@@ -849,7 +853,7 @@ func _on_movement_finished() -> void:
 			return
 
 		if decision and decision.want_storage_meal and target_storage and is_instance_valid(target_storage):
-			if _at_work_point(target_storage) or _near_site(target_storage):
+			if _at_work_point(target_storage) or _near_site(target_storage, 3.0):
 				if decision.withdraw_one_and_eat(target_storage):
 					return
 				decision.want_storage_meal = false
@@ -900,13 +904,13 @@ func _on_movement_finished() -> void:
 				start_clearing_obstacle(cur_t.target_node)
 				return
 
-		if target_storage and is_instance_valid(target_storage) and _at_work_point(target_storage):
+		if target_storage and is_instance_valid(target_storage) and (_at_work_point(target_storage) or _near_site(target_storage)):
 			if WorkSite.can_accept(target_storage, self):
 				start_delivering_to_storage(target_storage)
 				return
 			current_state = State.IDLE
 			return
-		if target_harvest and is_instance_valid(target_harvest) and _at_work_point(target_harvest):
+		if target_harvest and is_instance_valid(target_harvest) and (_at_work_point(target_harvest) or _near_site(target_harvest)):
 			if WorkSite.can_accept(target_harvest, self):
 				start_harvesting(target_harvest)
 				return
