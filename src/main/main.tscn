@@ -60,6 +60,7 @@ camera = NodePath("../CameraAnchor/SpringArm3D/Camera3D")
 environment = SubResource("Environment_jkpqq")
 
 [node name="SunPivot" type="Node3D" parent="." unique_id=65750426]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.0081067, 0)
 script = ExtResource("4_4tqcc")
 
 [node name="Sun" type="DirectionalLight3D" parent="SunPivot" unique_id=2056928374]
@@ -70,7 +71,7 @@ shadow_blur = 0.01
 directional_shadow_pancake_size = 100.0
 
 [node name="Devpole" type="CSGBox3D" parent="SunPivot" unique_id=111752427]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.0008544922, 13.405277, -0.017913818)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.0008544922, 6.859989, -0.017913818)
 size = Vector3(0.36791992, 22.5542, 0.41644287)
 
 [node name="CameraAnchor" type="Node3D" parent="." unique_id=1779606153]
