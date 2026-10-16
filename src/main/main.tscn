@@ -63,15 +63,15 @@ environment = SubResource("Environment_jkpqq")
 script = ExtResource("4_4tqcc")
 
 [node name="Sun" type="DirectionalLight3D" parent="SunPivot" unique_id=2056928374]
-transform = Transform3D(0.70710677, -0.50000006, 0.49999994, 0, 0.70710665, 0.7071069, -0.70710677, -0.50000006, 0.49999994, 0, 25.053116, 16.011642)
+transform = Transform3D(-4.371139e-08, -0.70710677, 0.70710665, 0, 0.70710665, 0.70710677, -1, 3.0908616e-08, -3.0908613e-08, 0, 30, -0.024)
 shadow_enabled = true
 shadow_opacity = 0.9
 shadow_blur = 0.01
 directional_shadow_pancake_size = 100.0
 
 [node name="Devpole" type="CSGBox3D" parent="SunPivot" unique_id=111752427]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 13.405277, 0)
-size = Vector3(1, 22.5542, 1)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.0008544922, 13.405277, -0.017913818)
+size = Vector3(0.36791992, 22.5542, 0.41644287)
 
 [node name="CameraAnchor" type="Node3D" parent="." unique_id=1779606153]
 transform = Transform3D(1, 0, 0, 0, 0.99999994, 0, 0, 0, 0.99999994, 0, 3, 22.50512)
