@@ -1,10 +1,11 @@
 # ==============================================================================
-# character.gd — FSM, nav, work, drop. Matrix → CharacterDecision.
-# ОБНОВЛЕНО: 2026-10-14 — campfire stoking (wood fuel)
+# character.gd — FSM, work, drop. HOW-nav → CharacterNavigation.
+# ОБНОВЛЕНО: 2026-10-17 — shelter night rest
 # ==============================================================================
 extends CharacterBody3D
 
 const CharacterDecisionScript = preload("res://src/characters/CharacterDecision.gd")
+const CharacterNavigationScript = preload("res://src/characters/CharacterNavigation.gd")
 
 # --- СОСТОЯНИЯ ПЕРСОНАЖА (FSM) ---
 enum State { IDLE, MOVING, CARRIED, GATHERING, DELIVERING, CLEARING, EATING, DEAD }
@@ -48,21 +49,13 @@ var stuck_side_distance: float = 1.0
 var push_radius: float = 0.7
 var push_strength: float = 2.5
 var push_min_speed: float = 0.15  # я «иду» если быстрее
-var _stuck_t: float = 0.0
-var _stuck_cycles: int = 0
-var _nav_side_step: bool = false
-var _path_goal_A: Vector3 = Vector3.ZERO
-var _last_pos_xz: Vector2 = Vector2.ZERO
-var _stuck_cd: float = 0.0
-var _nav_direct_t: float = 0.0
-var _nav_path: PackedVector3Array = PackedVector3Array()
-var _nav_path_i: int = 0
 var _pushed_t: float = 0.0
 var _dev_ui_timer: float = 0.0
 var _is_unloading_at_storage: bool = false
 
 ## Matrix decisions
 var decision = CharacterDecisionScript.new()
+var nav = null  # CharacterNavigation — HOW move
 
 var drop_site: Node3D = null
 ## intent движения для UI: wander|eat|deliver|work|move|drop|""
@@ -142,18 +135,22 @@ func _ready() -> void:
 			wander_speed_min = float(ConfigLoader.get_config_value("character", "base_stats", "wander_speed_min", wander_speed_min))
 			wander_speed_max = float(ConfigLoader.get_config_value("character", "base_stats", "wander_speed_max", wander_speed_max))
 
-	# Настройка агента и подключение RVO2 Avoidance
+	# NavigationAgent + CharacterNavigation (HOW)
 	if nav_agent:
-		nav_agent.target_desired_distance = arrival_distance
-		nav_agent.path_desired_distance = arrival_distance
 		nav_agent.avoidance_enabled = true
 		if "debug_enabled" in nav_agent:
 			var on := true
 			if DevCheatManager and DevCheatManager.has_method("is_dev_overlays_on"):
 				on = bool(DevCheatManager.is_dev_overlays_on())
 			nav_agent.debug_enabled = on
-		if not nav_agent.velocity_computed.is_connected(_on_safe_velocity_computed):
-			nav_agent.velocity_computed.connect(_on_safe_velocity_computed)
+	if nav == null:
+		nav = CharacterNavigationScript.new()
+		nav.name = "CharacterNavigation"
+		add_child(nav)
+	nav.setup(self, nav_agent)
+	nav.configure(arrival_distance, max_step_distance, rotation_speed, stuck_time, stuck_max_cycles, stuck_side_distance)
+	if not nav.arrived.is_connected(_on_movement_finished):
+		nav.arrived.connect(_on_movement_finished)
 
 	if TimeManager:
 		TimeManager.year_passed.connect(_on_year_passed)
@@ -451,106 +448,43 @@ func _process_arc_drop_movement(delta: float) -> void:
 		velocity.z = 0.0
 
 
-## Старт path к цели A (WP)
+## Старт path → CharacterNavigation
 func _nav_go_to(goal: Vector3) -> void:
-	_path_goal_A = goal
 	_current_target_pos = goal
-	_nav_side_step = false
-	_nav_direct_t = 0.0
-	_stuck_t = 0.0
-	_stuck_cycles = 0
-	_nav_path = PackedVector3Array()
-	_nav_path_i = 0
-	_last_pos_xz = Vector2(global_position.x, global_position.z)
-	if nav_agent:
+	if nav:
+		nav.go_to(goal)
+	elif nav_agent:
 		nav_agent.target_position = goal
-		call_deferred("_nav_refresh_path")
-		_nav_refresh_path()
 
 
-## Упёрся: шаг в сторону (от соседа / ⊥ к A), на mesh
-func _nav_step_aside() -> void:
-	if not nav_agent:
-		return
-	if not _nav_side_step:
-		_path_goal_A = _current_target_pos
-	var side: Vector3 = _side_step_dir()
-	var raw: Vector3 = global_position + side * stuck_side_distance
-	var map_rid: RID = nav_agent.get_navigation_map()
-	var b: Vector3 = NavigationServer3D.map_get_closest_point(map_rid, raw)
-	_nav_side_step = true
-	_stuck_t = 0.0
-	_stuck_cd = stuck_time  # пауза, чтобы не мельтешить
-	_current_target_pos = b
-	nav_agent.target_position = b
-
-
-## Направление side: от ближайшего перса, иначе ⊥ к A (L/R по cycle)
-func _side_step_dir() -> Vector3:
-	var away := _away_from_nearest_peer()
-	if away.length_squared() > 0.01:
-		return away.normalized()
-	var to_a := _path_goal_A - global_position
-	to_a.y = 0.0
-	if to_a.length_squared() > 0.01:
-		var f := to_a.normalized()
-		var side := Vector3(-f.z, 0.0, f.x)
-		if (_stuck_cycles % 2) == 1:
-			side = -side
-		return side
-	return Vector3(1.0, 0.0, 0.0)
-
-
-func _away_from_nearest_peer() -> Vector3:
-	var tree := get_tree()
-	if tree == null:
-		return Vector3.ZERO
-	var best_d := 2.5  # только «в упор»
-	var best := Vector3.ZERO
-	for n in tree.get_nodes_in_group("character"):
-		if n == self or not (n is Node3D) or not is_instance_valid(n):
-			continue
-		var o: Node3D = n as Node3D
-		var d: float = global_position.distance_to(o.global_position)
-		if d < best_d and d > 0.01:
-			best_d = d
-			var v: Vector3 = global_position - o.global_position
-			v.y = 0.0
-			best = v
-	return best
-
-
-## После шага в сторону — новый path к той же A
-func _nav_repath_A() -> void:
-	_nav_side_step = false
-	_stuck_t = 0.0
-	_stuck_cd = stuck_time
-	_stuck_cycles += 1
-	if _stuck_cycles >= stuck_max_cycles:
+func _process_nav_movement(delta: float) -> void:
+	if nav:
+		nav.tick(delta)
+	else:
 		_on_movement_finished()
-		return
-	_current_target_pos = _path_goal_A
-	if nav_agent:
-		nav_agent.target_position = _path_goal_A
 
 
+## RVO: только walk/deliver; иначе slide в CharacterNavigation
+func nav_wants_safe_velocity() -> bool:
+	if is_being_dragged or not is_on_floor():
+		return false
+	if current_state == State.MOVING:
+		return true
+	if current_state == State.DELIVERING and not _is_unloading_at_storage:
+		return true
+	return false
 
 
-
-## Поворот только при заметном угле; мелкие флипы — игнор / очень мягко
+## Поворот (работа / fallback) — делегируем nav, если есть
 func _face_dir(dir_x: float, dir_z: float, delta: float, min_speed: float = 0.35) -> void:
+	if nav and nav.has_method("face_dir"):
+		nav.face_dir(dir_x, dir_z, delta, min_speed)
+		return
 	var dlen := Vector2(dir_x, dir_z).length()
 	if dlen < min_speed:
 		return
 	var target_angle := atan2(-dir_x, -dir_z)
-	var diff := absf(angle_difference(rotation.y, target_angle))
-	# мёртвая зона ~8° — убирает микро-дёрганье
-	if diff < 0.14:
-		return
-	var turn := rotation_speed * delta
-	if diff < 0.5:
-		turn *= 0.35  # мелкий доворот медленнее
-	rotation.y = lerp_angle(rotation.y, target_angle, clampf(turn, 0.0, 1.0))
+	rotation.y = lerp_angle(rotation.y, target_angle, clampf(rotation_speed * delta, 0.0, 1.0))
 
 
 ## Стоп, но если толкнули — мягкое трение (иначе «вкопанный»)
@@ -591,13 +525,11 @@ func _push_peers(delta: float) -> void:
 		if dist > push_radius or dist < 0.001:
 			continue
 		var other_spd := Vector2(other.velocity.x, other.velocity.z).length()
-		# толкаем более медленного (стоящий / gather / edge stuck)
 		if other_spd >= my_spd * 0.95:
 			continue
 		var dir: Vector3 = offset / dist
 		var w: float = 1.0 - (dist / push_radius)
 		var impulse: float = push_strength * w * my_spd * delta * 10.0
-		# стоячим — сильнее
 		if other_spd < 0.05:
 			impulse *= 1.5
 		other.velocity.x += dir.x * impulse
@@ -608,218 +540,6 @@ func _push_peers(delta: float) -> void:
 		velocity.z -= dir.z * impulse * 0.15
 
 
-func _nav_refresh_path() -> void:
-	if not nav_agent:
-		return
-	nav_agent.target_position = _current_target_pos
-	# обязательно дергать next — иначе path/debug «мертвый»
-	var _poke: Vector3 = nav_agent.get_next_path_position()
-	_nav_path = nav_agent.get_current_navigation_path()
-	_nav_path_i = 0
-	if _nav_path.is_empty():
-		return
-	var best_i: int = 0
-	var best_d: float = INF
-	for i in range(_nav_path.size()):
-		var d: float = Vector2(global_position.x - _nav_path[i].x, global_position.z - _nav_path[i].z).length()
-		if d < best_d:
-			best_d = d
-			best_i = i
-	_nav_path_i = mini(best_i + 1, _nav_path.size() - 1)
-
-
-func _nav_hard_nudge_to_goal() -> void:
-	var goal: Vector3 = _path_goal_A if _path_goal_A != Vector3.ZERO else _current_target_pos
-	var to: Vector3 = goal - global_position
-	to.y = 0.0
-	if to.length_squared() < 0.0001:
-		return
-	var raw: Vector3 = global_position + to.normalized() * 0.45
-	if nav_agent:
-		var map_rid: RID = nav_agent.get_navigation_map()
-		raw = NavigationServer3D.map_get_closest_point(map_rid, raw)
-	global_position.x = raw.x
-	global_position.z = raw.z
-
-
-## Прямо к цели
-func _nav_move_direct(delta: float, goal: Vector3) -> void:
-	var to := goal - global_position
-	to.y = 0.0
-	var dist := to.length()
-	if dist <= arrival_distance:
-		_stop_horizontal_movement(delta)
-		move_and_slide()
-		return
-	var move_dir := to / dist
-	var move_spd: float = get_current_move_speed()
-	var vx: float = move_dir.x * move_spd
-	var vz: float = move_dir.z * move_spd
-	var step_len: float = Vector2(vx * delta, vz * delta).length()
-	if step_len > max_step_distance and delta > 0.0:
-		var cap: float = max_step_distance / step_len
-		vx *= cap
-		vz *= cap
-	velocity.x = vx
-	velocity.z = vz
-	_face_dir(vx, vz, delta, 0.25)
-	move_and_slide()
-
-
-## Перемещение: waypoints path + direct fallback
-func _process_nav_movement(delta: float) -> void:
-	if not nav_agent:
-		_on_movement_finished()
-		return
-
-	var current_pos: Vector3 = global_position
-	var pos_xz := Vector2(current_pos.x, current_pos.z)
-	var goal: Vector3 = _current_target_pos
-	var dist_to_final: float = pos_xz.distance_to(Vector2(goal.x, goal.z))
-
-	# agent path + debug: target + get_next каждый кадр
-	nav_agent.target_position = goal
-	var _agent_next: Vector3 = nav_agent.get_next_path_position()
-
-	if dist_to_final <= arrival_distance:
-		_stop_horizontal_movement(delta)
-		if _nav_side_step:
-			_nav_repath_A()
-			move_and_slide()
-			return
-		_nav_direct_t = 0.0
-		_stuck_t = 0.0
-		_stuck_cycles = 0
-		_on_movement_finished()
-		move_and_slide()
-		return
-
-	# direct burst
-	if _nav_direct_t > 0.0:
-		_nav_direct_t -= delta
-		_nav_move_direct(delta, goal)
-		return
-
-	# path finished but not there
-	if nav_agent.is_navigation_finished() and dist_to_final > arrival_distance:
-		_nav_refresh_path()
-		_nav_direct_t = 1.0
-		_nav_hard_nudge_to_goal()
-		_nav_move_direct(delta, goal)
-		return
-
-	# stuck
-	_stuck_cd = maxf(_stuck_cd - delta, 0.0)
-	var hvel: float = Vector2(velocity.x, velocity.z).length()
-	var moved: float = pos_xz.distance_to(_last_pos_xz)
-	_last_pos_xz = pos_xz
-	if _stuck_cd <= 0.0 and hvel < 0.1 and moved < 0.04:
-		_stuck_t += delta
-		# быстрее реагируем на mesh-jam
-		var lim: float = minf(stuck_time, 1.0)
-		if _stuck_t >= lim:
-			_stuck_t = 0.0
-			_stuck_cd = 0.4
-			_stuck_cycles += 1
-			if _stuck_cycles >= stuck_max_cycles:
-				# последний шанс: nudge + finish if close enough
-				_nav_hard_nudge_to_goal()
-				if pos_xz.distance_to(Vector2(goal.x, goal.z)) <= arrival_distance * 3.0:
-					_on_movement_finished()
-				else:
-					_nav_direct_t = 1.2
-					_nav_move_direct(delta, goal)
-				move_and_slide()
-				return
-			# 1) skip waypoint  2) nudge+direct  3) side
-			var mode: int = _stuck_cycles % 3
-			if mode == 0:
-				if _nav_path_i < _nav_path.size() - 1:
-					_nav_path_i += 1
-				_nav_direct_t = 0.7
-				_nav_hard_nudge_to_goal()
-			elif mode == 1:
-				_nav_refresh_path()
-				_nav_direct_t = 1.0
-				_nav_hard_nudge_to_goal()
-			else:
-				_nav_step_aside()
-			move_and_slide()
-			return
-	else:
-		_stuck_t = 0.0
-
-	# sync path from agent (debug + follow)
-	var agent_path: PackedVector3Array = nav_agent.get_current_navigation_path()
-	if not agent_path.is_empty():
-		if _nav_path.is_empty() or agent_path.size() != _nav_path.size():
-			_nav_path = agent_path
-			_nav_path_i = mini(_nav_path_i, maxi(_nav_path.size() - 1, 0))
-	elif _nav_path.is_empty():
-		_nav_refresh_path()
-
-	# target waypoint
-	var aim: Vector3 = goal
-	if not _nav_path.is_empty():
-		# advance along path
-		while _nav_path_i < _nav_path.size():
-			var wp: Vector3 = _nav_path[_nav_path_i]
-			var d_wp: float = Vector2(current_pos.x - wp.x, current_pos.z - wp.z).length()
-			if d_wp <= maxf(arrival_distance, 0.35):
-				_nav_path_i += 1
-				continue
-			aim = wp
-			break
-		if _nav_path_i >= _nav_path.size():
-			aim = goal
-
-	var dir: Vector3 = aim - current_pos
-	dir.y = 0.0
-	var next_dist: float = dir.length()
-
-	if next_dist < 0.05:
-		# jam under feet → goal direct
-		_nav_direct_t = 0.6
-		_nav_hard_nudge_to_goal()
-		_nav_move_direct(delta, goal)
-		return
-
-	var move_dir: Vector3 = dir / next_dist
-	var move_spd: float = get_current_move_speed()
-	var target_vel_x: float = move_dir.x * move_spd
-	var target_vel_z: float = move_dir.z * move_spd
-	var step_len2: float = Vector2(target_vel_x * delta, target_vel_z * delta).length()
-	if step_len2 > max_step_distance and delta > 0.0:
-		var cap2: float = max_step_distance / step_len2
-		target_vel_x *= cap2
-		target_vel_z *= cap2
-
-	# always drive velocity (avoidance optional)
-	if nav_agent.avoidance_enabled:
-		nav_agent.set_velocity(Vector3(target_vel_x, velocity.y, target_vel_z))
-	else:
-		velocity.x = target_vel_x
-		velocity.z = target_vel_z
-		_face_dir(target_vel_x, target_vel_z, delta, 0.3)
-		move_and_slide()
-
-
-## Колбэк RVO Avoidance от навигационного сервера Godot
-func _on_safe_velocity_computed(safe_velocity: Vector3) -> void:
-	if is_being_dragged or not is_on_floor():
-		return
-	if current_state == State.MOVING or (current_state == State.DELIVERING and not _is_unloading_at_storage):
-		velocity.x = safe_velocity.x
-		velocity.z = safe_velocity.z
-		var vel_2d = Vector2(safe_velocity.x, safe_velocity.z)
-		_face_dir(vel_2d.x, vel_2d.y, get_physics_process_delta_time(), 0.4)
-		move_and_slide()
-	else:
-		# Другие состояния: колбэк пришёл, но state уже сменился —
-		# всё равно вызываем move_and_slide чтобы гравитация не подвисла
-		move_and_slide()
-
-## Разворот лицом к целевому объекту
 func _safe_rotate_towards(target_node, delta: float) -> void:
 	# не передавать freed в typed API — проверка до call
 	if target_node == null or not is_instance_valid(target_node):
@@ -841,11 +561,14 @@ func _rotate_towards_target(target_node, delta: float) -> void:
 func _on_movement_finished() -> void:
 	if current_state == State.MOVING:
 		# wander: rest в decision
-		if move_intent == "wander":
-			move_intent = ""
+		if move_intent == "wander" or move_intent == "rest":
+			var was_rest: bool = move_intent == "rest"
+			move_intent = "rest" if was_rest else ""
 			current_state = State.IDLE
 			if decision and decision.has_method("on_wander_finished"):
 				decision.on_wander_finished()
+			if was_rest:
+				move_intent = "rest"  # держим метку ночи для UI
 			return
 		# После context drop — think, не work
 		if _awaiting_drop_decide:
@@ -983,12 +706,16 @@ func _happiness_mult() -> float:
 
 func get_current_move_speed() -> float:
 	var s: float = speed * _energy_mult() * _happiness_mult()
-	if move_intent == "wander":
+	if move_intent == "wander" or move_intent == "rest":
 		var wmin: float = wander_speed_min
 		var wmax: float = wander_speed_max
 		if wmax < wmin:
 			wmax = wmin
-		s *= clampf(_wander_speed_factor, wmin, wmax) if _wander_speed_factor > 0.0 else randf_range(wmin, wmax)
+		# rest — спокойный шаг (середина wander-диапазона)
+		if move_intent == "rest":
+			s *= clampf((wmin + wmax) * 0.5, wmin, wmax)
+		else:
+			s *= clampf(_wander_speed_factor, wmin, wmax) if _wander_speed_factor > 0.0 else randf_range(wmin, wmax)
 	return maxf(s, 0.05)
 
 
@@ -1326,8 +1053,7 @@ func move_to_position(target_pos: Vector3) -> void:
 	current_state = State.MOVING
 	if task_manager:
 		task_manager.set_user_override_task(TaskManager.Task.new(TaskManager.TaskType.MOVE_TO, target_pos, null, 100))
-	if nav_agent:
-		nav_agent.target_position = target_pos
+	_nav_go_to(target_pos)
 
 
 ## Context Drop v2: приземление → think 2–5s → resolve_after_drop (не сразу work).
@@ -1365,8 +1091,8 @@ func _soft_move_to(target_pos: Vector3) -> void:
 	_release_all_work_points()
 	_current_target_pos = target_pos
 	current_state = State.MOVING
-	if nav_agent:
-		nav_agent.target_position = target_pos
+	# CharacterNavigation: только go_to включает tick (_active)
+	_nav_go_to(target_pos)
 
 
 func _begin_drop_think() -> void:
@@ -1420,6 +1146,148 @@ func wander_nearby(radius_min: float = -1.0, radius_max: float = -1.0) -> void:
 
 
 ## Единый вход: игрок/AI → go_work(site). Всегда WP, потом can_accept.
+## Ночь: шалаш (кровать) → иначе костёр
+func go_night_rest() -> void:
+	if go_rest_at_shelter():
+		return
+	go_rest_near_campfire()
+
+
+## Слот сна в ближайшем шалаше с свободной кроватью
+func go_rest_at_shelter() -> bool:
+	_awaiting_drop_decide = false
+	_drop_think_left = -1.0
+	var tree := get_tree()
+	if tree == null:
+		return false
+	var best: Node3D = null
+	var best_d: float = INF
+	for n in tree.get_nodes_in_group("shelter"):
+		if not (n is Node3D) or not is_instance_valid(n):
+			continue
+		if n.has_method("has_free_bed") and not bool(n.has_free_bed()):
+			continue
+		if "is_built" in n and not bool(n.is_built):
+			continue
+		var d: float = global_position.distance_to((n as Node3D).global_position)
+		if d < best_d:
+			best_d = d
+			best = n as Node3D
+	if best == null:
+		return false
+	# release old bed if any other shelter
+	_release_shelter_bed()
+	var dest: Vector3 = best.global_position
+	if best.has_method("claim_bed"):
+		dest = best.claim_bed(self)
+	target_storage = null  # not storage
+	# remember hut for release
+	set_meta("rest_shelter", best)
+	move_intent = "rest"
+	if data:
+		print("[Rest] %s → shelter %s" % [data.character_name, best.name])
+	_soft_move_to(dest)
+	return true
+
+
+func _release_shelter_bed() -> void:
+	if has_meta("rest_shelter"):
+		var hut = get_meta("rest_shelter")
+		if hut and is_instance_valid(hut) and hut.has_method("release_bed"):
+			hut.release_bed(self)
+		remove_meta("rest_shelter")
+
+
+func is_near_shelter_rest() -> bool:
+	if has_meta("rest_shelter"):
+		var hut = get_meta("rest_shelter")
+		if hut and is_instance_valid(hut):
+			if hut.has_method("is_occupant") and hut.is_occupant(self):
+				return true
+			return global_position.distance_to(hut.global_position) <= 2.5
+	return false
+
+
+## Вечер/ночь: точка в радиусе OmniLight костра (заметно «все у огня»)
+func go_rest_near_campfire() -> void:
+	_awaiting_drop_decide = false
+	_drop_think_left = -1.0
+	_release_shelter_bed()
+	var fire: Node3D = _find_nearest_campfire()
+	if fire == null:
+		wander_nearby()
+		return
+	var radius: float = 10.0
+	if fire.has_method("get_rest_radius"):
+		radius = float(fire.get_rest_radius())
+	radius = maxf(radius, 2.0)
+	var dest: Vector3 = fire.global_position
+	var ok := false
+	for _i in range(6):
+		# ближе к огню 15–70% range — кучкуются, заметнее
+		var r: float = randf_range(radius * 0.15, radius * 0.7)
+		var a: float = randf() * TAU
+		var cand: Vector3 = fire.global_position + Vector3(cos(a) * r, 0.0, sin(a) * r)
+		cand.y = global_position.y
+		if nav_agent:
+			var map_rid: RID = nav_agent.get_navigation_map()
+			if map_rid.is_valid():
+				var on_mesh: Vector3 = NavigationServer3D.map_get_closest_point(map_rid, cand)
+				var pull: float = Vector2(cand.x - on_mesh.x, cand.z - on_mesh.z).length()
+				if pull > 2.5 or on_mesh.y <= wander_min_y:
+					continue
+				var d_me: float = Vector2(global_position.x - on_mesh.x, global_position.z - on_mesh.z).length()
+				if d_me < 0.35:
+					continue
+				dest = on_mesh
+				ok = true
+				break
+		else:
+			dest = cand
+			ok = true
+			break
+	if not ok:
+		# fallback: чуть в сторону от центра (не в obstacle)
+		var a2: float = randf() * TAU
+		dest = fire.global_position + Vector3(cos(a2) * 1.5, 0.0, sin(a2) * 1.5)
+		if nav_agent:
+			var map_rid2: RID = nav_agent.get_navigation_map()
+			if map_rid2.is_valid():
+				dest = NavigationServer3D.map_get_closest_point(map_rid2, dest)
+	move_intent = "rest"
+	if data:
+		print("[Rest] %s → campfire (r=%.1f dist=%.1f)" % [
+			data.character_name, radius, global_position.distance_to(fire.global_position)
+		])
+	_soft_move_to(dest)
+
+
+func _find_nearest_campfire() -> Node3D:
+	var tree := get_tree()
+	if tree == null:
+		return null
+	var best: Node3D = null
+	var best_d: float = INF
+	for n in tree.get_nodes_in_group("campfire"):
+		if not (n is Node3D) or not is_instance_valid(n):
+			continue
+		var d: float = global_position.distance_to((n as Node3D).global_position)
+		if d < best_d:
+			best_d = d
+			best = n as Node3D
+	return best
+
+
+func is_near_campfire_rest() -> bool:
+	var fire: Node3D = _find_nearest_campfire()
+	if fire == null:
+		return false
+	var radius: float = 10.0
+	if fire.has_method("get_rest_radius"):
+		radius = float(fire.get_rest_radius())
+	return global_position.distance_to(fire.global_position) <= maxf(radius, 1.5) * 1.05
+
+
 func go_work(site: Node3D) -> void:
 	start_work_at(site)
 
@@ -1446,6 +1314,14 @@ func start_work_at(site: Node3D) -> void:
 
 
 func start_harvesting(site: Node3D) -> void:
+	# ночь + пустые руки — не начинаем сбор (доделывают только уже начатое)
+	if decision and decision.has_method("_is_rest_time") and decision._is_rest_time():
+		if not (data and data.item_amount > 0):
+			if has_method("go_night_rest"):
+				go_night_rest()
+			elif has_method("go_rest_near_campfire"):
+				go_rest_near_campfire()
+			return
 	# с грузом не собираем — сначала сдача
 	if data and data.item_amount > 0:
 		if target_storage and is_instance_valid(target_storage):
@@ -1682,6 +1558,13 @@ func _go_to_site_wp(site: Node3D) -> void:
 
 
 func start_clearing_obstacle(obstacle_node: Node3D) -> void:
+	if decision and decision.has_method("_is_rest_time") and decision._is_rest_time():
+		if not (data and data.item_amount > 0):
+			if has_method("go_night_rest"):
+				go_night_rest()
+			elif has_method("go_rest_near_campfire"):
+				go_rest_near_campfire()
+			return
 	_release_all_work_points()
 	is_being_dragged = false
 	_is_unloading_at_storage = false
@@ -1697,8 +1580,7 @@ func start_clearing_obstacle(obstacle_node: Node3D) -> void:
 		current_state = State.CLEARING
 	else:
 		current_state = State.MOVING
-		if nav_agent:
-			nav_agent.target_position = _current_target_pos
+		_nav_go_to(_current_target_pos)
 
 func _find_nearest_storage_node() -> Node3D:
 	# знание «кто storage» — у StorageSite
@@ -1838,6 +1720,11 @@ func _update_dev_ui() -> void:
 	elif target_storage and is_instance_valid(target_storage):
 		if decision and decision.want_storage_meal:
 			site_hint = "E:meal"
+		elif move_intent == "rest":
+			if is_near_shelter_rest():
+				site_hint = "R:hut"
+			else:
+				site_hint = "R:camp"
 		elif data and data.item_amount > 0:
 			site_hint = "D:" + WorkSite.get_type(target_storage)
 		else:

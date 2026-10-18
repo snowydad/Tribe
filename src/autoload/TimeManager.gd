@@ -110,6 +110,10 @@ func is_night_hour(hour: float) -> bool:
 	return h >= dusk_end or h < dawn_start
 
 
+func is_night() -> bool:
+	return is_night_hour(get_game_hour())
+
+
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_CLOSE_REQUEST or what == NOTIFICATION_APPLICATION_PAUSED:
 		_save_current_timestamp()

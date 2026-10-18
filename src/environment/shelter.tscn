@@ -1,0 +1,69 @@
+[gd_scene load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://src/environment/shelter.gd" id="1_script"]
+
+[sub_resource type="BoxMesh" id="BoxMesh"]
+size = Vector3(2.2, 1.4, 2.2)
+
+[sub_resource type="BoxShape3D" id="BoxBody"]
+size = Vector3(2.0, 1.2, 2.0)
+
+[sub_resource type="BoxShape3D" id="BoxInteract"]
+size = Vector3(3.5, 2.0, 3.5)
+
+[sub_resource type="BoxMesh" id="RoofMesh"]
+size = Vector3(2.6, 0.15, 2.6)
+
+[node name="Shelter" type="Node3D"]
+script = ExtResource("1_script")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.7, 0)
+mesh = SubResource("BoxMesh")
+
+[node name="Roof" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.5, 0)
+mesh = SubResource("RoofMesh")
+
+[node name="StaticBody3D" type="StaticBody3D" parent="."]
+collision_layer = 4
+collision_mask = 0
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="StaticBody3D"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.6, 0)
+shape = SubResource("BoxBody")
+
+[node name="InteractiveArea" type="Area3D" parent="."]
+collision_layer = 4
+collision_mask = 0
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="InteractiveArea"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.8, 0)
+shape = SubResource("BoxInteract")
+
+[node name="WorkPoints" type="Node3D" parent="."]
+
+[node name="WP_N" type="Marker3D" parent="WorkPoints"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -1.8)
+
+[node name="WP_S" type="Marker3D" parent="WorkPoints"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1.8)
+
+[node name="SleepPoints" type="Node3D" parent="."]
+
+[node name="Bed_0" type="Marker3D" parent="SleepPoints"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.5, 0.1, -0.4)
+
+[node name="Bed_1" type="Marker3D" parent="SleepPoints"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.5, 0.1, -0.4)
+
+[node name="Bed_2" type="Marker3D" parent="SleepPoints"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.5, 0.1, 0.5)
+
+[node name="Bed_3" type="Marker3D" parent="SleepPoints"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.5, 0.1, 0.5)
+
+[node name="DevLabel" type="Label3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.2, 0)
+billboard = 1
+text = "Shelter"

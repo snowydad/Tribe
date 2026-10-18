@@ -1,6 +1,6 @@
 # ==============================================================================
 # CharacterDecision.gd — решения (eat / deliver / harvest / drop). Движение — host.
-# ОБНОВЛЕНО: 2026-10-14 — stoking campfire
+# ОБНОВЛЕНО: 2026-10-17 — night rest shelter first
 # ==============================================================================
 class_name CharacterDecision
 extends RefCounted
@@ -25,6 +25,21 @@ var _wander_cfg_loaded: bool = false
 func setup(h: CharacterBody3D) -> void:
 	host = h
 	_load_idle_wander_cfg()
+
+
+func _is_night() -> bool:
+	if TimeManager and TimeManager.has_method("is_night"):
+		return bool(TimeManager.is_night())
+	if TimeManager and TimeManager.has_method("is_night_hour") and TimeManager.has_method("get_game_hour"):
+		return bool(TimeManager.is_night_hour(TimeManager.get_game_hour()))
+	return false
+
+
+## Отдых: вечер+ночь (см. TimeManager.is_rest_time)
+func _is_rest_time() -> bool:
+	if TimeManager and TimeManager.has_method("is_rest_time"):
+		return bool(TimeManager.is_rest_time())
+	return _is_night()
 
 
 func _load_idle_wander_cfg() -> void:
@@ -360,7 +375,10 @@ func go_eat_from_storage() -> void:
 	else:
 		host.move_intent = "eat"
 		host.current_state = host.State.MOVING
-		if host.nav_agent:
+		# CharacterNavigation: go_to, не только agent.target
+		if host.has_method("_nav_go_to"):
+			host._nav_go_to(host._current_target_pos)
+		elif host.nav_agent:
 			host.nav_agent.target_position = host._current_target_pos
 
 
@@ -517,6 +535,59 @@ func process_idle(delta: float) -> void:
 	if should_eat_from_hands() or should_eat_from_storage():
 		ensure_eat_task()
 
+	# --- НОЧЬ: добить руки/еду, потом к костру, без новой работы ---
+	if _is_rest_time():
+		# сначала сдать груз / съесть
+		if hands_busy():
+			if not should_eat_from_hands() and should_deliver():
+				host._go_to_nearest_storage()
+				return
+			if should_eat_from_hands():
+				ensure_eat_task()
+				promote_eat_task()
+				execute_eat_task()
+				return
+			# прочий груз без deliver — resolve
+			resolve_cargo_action()
+			return
+		var tm_n = _tm()
+		if tm_n and tm_n.has_tasks():
+			var ct = tm_n.get_current_task()
+			if ct and ct.type == TaskManager.TaskType.EAT:
+				execute_eat_task()
+				return
+			# GATHER/CLEAR/DELIVER без груза — снять, не работать ночью
+			if ct and ct.type in [TaskManager.TaskType.GATHER, TaskManager.TaskType.CLEAR]:
+				tm_n.complete_current_task()
+				return
+			if ct and ct.type == TaskManager.TaskType.DELIVER and not hands_busy():
+				tm_n.complete_current_task()
+				return
+		# руки пусты — шалаш, иначе костёр
+		var near_safe: bool = false
+		if host.has_method("is_near_shelter_rest") and host.is_near_shelter_rest():
+			near_safe = true
+		elif host.has_method("is_near_campfire_rest") and host.is_near_campfire_rest():
+			near_safe = true
+		if near_safe:
+			host.move_intent = "rest"
+			var near_delay: float = idle_wander_delay
+			if host.has_method("is_near_shelter_rest") and host.is_near_shelter_rest():
+				near_delay = idle_wander_delay * 3.0
+			else:
+				near_delay = minf(idle_wander_delay, 2.0)
+			if _wander_rest_t <= 0.0 and _idle_boredom_t >= near_delay:
+				_idle_boredom_t = 0.0
+				_wander_rest_t = randf_range(1.0, 2.5)
+				if host.has_method("go_night_rest"):
+					host.go_night_rest()
+			return
+		if host.has_method("go_night_rest"):
+			host.go_night_rest()
+		elif host.has_method("go_rest_near_campfire"):
+			host.go_rest_near_campfire()
+		return
+
 	if hands_busy():
 		# eat уже в очереди; deliver только если не жрём с рук
 		if not should_eat_from_hands() and should_deliver():
@@ -602,3 +673,8 @@ func process_idle(delta: float) -> void:
 	_idle_boredom_t += delta
 	if _idle_boredom_t >= idle_wander_delay:
 		_try_idle_wander()
+
+
+func on_wander_finished() -> void:
+	_wander_rest_t = randf_range(wander_rest_min, wander_rest_max)
+	_idle_boredom_t = 0.0

@@ -15,6 +15,7 @@
 [ext_resource type="Script" uid="uid://503ly4ypns80" path="res://src/ui/CharacterInfoPanel.gd" id="11_erw1m"]
 [ext_resource type="PackedScene" uid="uid://bqqx8dbr4j38b" path="res://src/environment/debris.tscn" id="13_ibsor"]
 [ext_resource type="PackedScene" uid="uid://0j333howo578" path="res://src/environment/campfire.tscn" id="14_hc2u7"]
+[ext_resource type="PackedScene" path="res://src/environment/shelter.tscn" id="16_nqfqj"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_frqgp"]
 sky_top_color = Color(0.4618634, 0.53608686, 0.6351234, 1)
@@ -157,3 +158,6 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5.411136, 1.3161111, 17.1749
 
 [node name="Campfire" parent="." unique_id=743318931 instance=ExtResource("14_hc2u7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.5540747, 1.5754921, 30.798878)
+
+[node name="Shelter" parent="." unique_id=536551137 instance=ExtResource("16_nqfqj")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8.00086, 1.5027108, 27.58843)

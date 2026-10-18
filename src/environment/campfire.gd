@@ -1,6 +1,6 @@
 # ==============================================================================
 # campfire.gd — костёр WorkSite: fuel (wood), lit/embers. v1 без happy.
-# ОБНОВЛЕНО: 2026-10-14 — fuel tick, deposit wood, capacity
+# ОБНОВЛЕНО: 2026-10-17 — get_rest_radius (night rest)
 # ==============================================================================
 extends Node3D
 class_name CampfireSite
@@ -95,6 +95,15 @@ func _sync_light() -> void:
 
 
 # --- API ---
+## Радиус «у костра» = omni_range FireLight (для ночного отдыха)
+func get_rest_radius() -> float:
+	if fire_light == null:
+		fire_light = get_node_or_null("FireLight") as OmniLight3D
+	if fire_light:
+		return maxf(float(fire_light.omni_range), 1.0)
+	return 10.0
+
+
 func needs_fuel() -> bool:
 	return wood_stock < max_wood and fuel_time < float(max_wood) * fuel_seconds_per_wood
 
