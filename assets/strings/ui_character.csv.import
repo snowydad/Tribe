@@ -1,0 +1,19 @@
+[remap]
+
+importer="csv_translation"
+type="Translation"
+uid="uid://dw3f27p716k63"
+
+[deps]
+
+files=["res://assets/strings/ui_character.comment.translation", "res://assets/strings/ui_character.ru.translation", "res://assets/strings/ui_character.en.translation"]
+
+source_file="res://assets/strings/ui_character.csv"
+dest_files=["res://assets/strings/ui_character.comment.translation", "res://assets/strings/ui_character.ru.translation", "res://assets/strings/ui_character.en.translation"]
+
+[params]
+
+compress=1
+delimiter=0
+unescape_keys=false
+unescape_translations=true
