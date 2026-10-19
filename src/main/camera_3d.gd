@@ -1,5 +1,6 @@
 # ==============================================================================
-# ФАЙЛ: src/main/camera_3d.gd
+# camera_3d.gd — pan LMB после threshold; release всегда в _input
+# ОБНОВЛЕНО: 2026-10-18 — fix sticky map drag
 # НАЗНАЧЕНИЕ: RTS-камера с подстройкой высоты над рельефом (слой 1), инерцией,
 #            резинкой и вращением вокруг якоря зажатым колесиком мыши (MMB).
 # ==============================================================================
@@ -49,6 +50,10 @@ var _is_rotating: bool = false
 var _drag_plane: Plane
 var _drag_start_world_pos: Vector3 = Vector3.ZERO
 var _pan_velocity: Vector3 = Vector3.ZERO
+## LMB: pan только после сдвига (иначе «прилипает» и конфликтует с PIM)
+var _lmb_down: bool = false
+var _lmb_start_pos: Vector2 = Vector2.ZERO
+@export var pan_drag_threshold: float = 8.0
 
 func _ready() -> void:
 	_update_zoom_and_pitch()
@@ -58,17 +63,29 @@ func _ready() -> void:
 func cancel_drag() -> void:
 	_is_dragging = false
 	_is_rotating = false
+	_lmb_down = false
 	_drag_start_world_pos = Vector3.ZERO
 	_pan_velocity = Vector3.ZERO
 
 func force_reset_drag() -> void:
 	cancel_drag()
 
+## Release LMB всегда (даже если PIM marked handled) — иначе pan «залипает»
+func _input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
+		_lmb_down = false
+		_stop_drag()
+
+
 func _unhandled_input(event: InputEvent) -> void:
 	if is_locked:
+		# всё равно гасим LMB state
+		if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
+			_lmb_down = false
+			_stop_drag()
 		return
 
-	# --- 1. ВРАЩЕНИЕ ВОКРУГ ЯКОРЯ (Зажатое колесико мыши / MMB) ---
+	# --- 1. MMB orbit ---
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_MIDDLE:
 		if event.pressed:
 			_is_rotating = true
@@ -78,7 +95,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event is InputEventMouseMotion and _is_rotating:
 		rotation.y -= event.relative.x * rotate_sensitivity
 
-	# --- 2. ЗУМ И ПЕРЕТАСКИВАНИЕ КАРТЫ (ЛКМ / Колесо) ---
+	# --- 2. Zoom + LMB pan (pan только после сдвига) ---
 	elif event is InputEventMouseButton:
 		if event.button_index == MOUSE_BUTTON_WHEEL_UP and event.pressed:
 			_zoom(-zoom_speed)
@@ -86,17 +103,24 @@ func _unhandled_input(event: InputEvent) -> void:
 			_zoom(zoom_speed)
 		elif event.button_index == MOUSE_BUTTON_LEFT:
 			if event.pressed:
-				_start_drag(event.position)
+				_lmb_down = true
+				_lmb_start_pos = event.position
+				# НЕ стартуем pan сразу — ждём motion > threshold
 			else:
+				_lmb_down = false
 				_stop_drag()
 
-	elif event is InputEventMouseMotion and _is_dragging:
-		var current_world_pos = _get_ground_position(event.position)
-		if current_world_pos != Vector3.ZERO:
-			var delta = _drag_start_world_pos - current_world_pos
-			var target_pos = global_position + Vector3(delta.x, 0, delta.z)
-			global_position = _apply_rubber_band_to_position(target_pos)
-			_pan_velocity = Vector3(delta.x, 0, delta.z) / get_process_delta_time()
+	elif event is InputEventMouseMotion:
+		if _lmb_down and not _is_dragging and not is_locked:
+			if event.position.distance_to(_lmb_start_pos) >= pan_drag_threshold:
+				_start_drag(_lmb_start_pos)
+		if _is_dragging:
+			var current_world_pos = _get_ground_position(event.position)
+			if current_world_pos != Vector3.ZERO:
+				var delta = _drag_start_world_pos - current_world_pos
+				var target_pos = global_position + Vector3(delta.x, 0, delta.z)
+				global_position = _apply_rubber_band_to_position(target_pos)
+				_pan_velocity = Vector3(delta.x, 0, delta.z) / get_process_delta_time()
 
 func _process(delta: float) -> void:
 	# Подстраиваем высоту Y над рельефом ТОЛЬКО когда НЕ тащим карту мышкой
