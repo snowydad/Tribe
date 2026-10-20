@@ -80,6 +80,11 @@ func load_all_stats_from_config() -> void:
 	health = ConfigLoader.get_character_value("base_stats", "max_health", 100.0)
 	energy = float(ConfigLoader.get_character_value("initial_stats", "energy", 75.0))
 	happiness = float(ConfigLoader.get_character_value("initial_stats", "happiness", 75.0))
+	var hmin: float = float(ConfigLoader.get_character_value("initial_stats", "hunger_min", 25.0))
+	var hmax: float = float(ConfigLoader.get_character_value("initial_stats", "hunger_max", 75.0))
+	if hmax < hmin:
+		hmax = hmin
+	hunger = randf_range(hmin, hmax)
 
 	var default_strength = ConfigLoader.get_character_value("initial_stats", "strength", 10)
 	var default_intelligence = ConfigLoader.get_character_value("initial_stats", "intelligence", 10)

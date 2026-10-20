@@ -1,6 +1,6 @@
 # ==============================================================================
 # PlayerInputManager.gd — ввод: тык = select/инфо, hold/сдвиг = drag
-# ОБНОВЛЕНО: 2026-10-18 — click vs hold/drag
+# ОБНОВЛЕНО: 2026-10-20 — pan release ≠ move order
 # ==============================================================================
 extends Node3D
 
@@ -70,26 +70,31 @@ func _on_lmb_down(pos: Vector2) -> void:
 
 func _on_lmb_up(pos: Vector2) -> void:
 	if not _is_pressing and not is_dragging_character:
-		# всё равно сброс камеры (release мог «потеряться» у camera)
 		_cancel_camera_drag()
 		return
 	_is_pressing = false
 	_press_on_character = null
-	_cancel_camera_drag()  # клик/up не должен оставлять pan
+
+	var drag_distance: float = pos.distance_to(_click_start_pos)
 
 	if is_dragging_character:
 		is_dragging_character = false
 		_unlock_camera()
+		_cancel_camera_drag()
 		_handle_character_drop(pos)
 		get_viewport().set_input_as_handled()
 		return
 
-	# короткий тык / без drag
-	var drag_distance: float = pos.distance_to(_click_start_pos)
-	# если отпустили на том же персе — уже selected; клик по земле/сайту
-	_handle_click(pos)
-	if drag_distance < drag_threshold * 2.0:
+	# Сдвиг мыши = pan карты (или отмена) — НЕ приказ «иди сюда»
+	if drag_distance >= drag_threshold:
+		_cancel_camera_drag()
 		get_viewport().set_input_as_handled()
+		return
+
+	# короткий тык: select / go_work / move
+	_cancel_camera_drag()
+	_handle_click(pos)
+	get_viewport().set_input_as_handled()
 
 
 func _begin_drag(ch: CharacterBody3D) -> void:

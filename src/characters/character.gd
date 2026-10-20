@@ -1,6 +1,6 @@
 # ==============================================================================
 # character.gd — FSM, work, drop. HOW-nav → CharacterNavigation.
-# ОБНОВЛЕНО: 2026-10-17 — shelter night rest
+# ОБНОВЛЕНО: 2026-10-20 — go_work think; talent work
 # ==============================================================================
 extends CharacterBody3D
 
@@ -38,6 +38,22 @@ var target_harvest: Node3D = null  # любой WorkSite category harvest
 var target_storage: Node3D = null
 var target_obstacle: Node3D = null
 var target_campfire: Node3D = null
+
+# --- thought bubble ---
+var _thought_root: Node3D = null
+var _thought_bubble: Sprite3D = null
+var _thought_icon: Sprite3D = null
+var _thought_id: String = ""
+var _thought_cfg_loaded: bool = false
+var _th_hunger_thr: float = 40.0
+var _th_bubble_path: String = "res://assets/ui/thought_bubble.png"
+var _th_icon_food: String = "res://assets/ui/icon_food.png"
+var _th_icon_tent: String = "res://assets/ui/icon_tent.png"
+var _th_icon_bonfire: String = "res://assets/ui/icon_bonfire.png"
+var _th_bubble_h: float = 2.15
+var _th_bubble_px: float = 0.0035
+var _th_icon_px: float = 0.0022
+var _th_icon_y: float = 0.08
 
 var _current_target_pos: Vector3 = Vector3.ZERO
 var _work_timer: float = 0.0
@@ -94,6 +110,7 @@ func _ready() -> void:
 	if decision == null:
 		decision = CharacterDecisionScript.new()
 	decision.setup(self)
+	_setup_thought_bubble()
 	add_to_group("character")
 
 	# Чтение параметров скорости и навигации из конфигурационных файлов (.ini)
@@ -315,6 +332,7 @@ func _physics_process(delta: float) -> void:
 	if _dev_ui_timer >= 0.2:
 		_dev_ui_timer = 0.0
 		_update_dev_ui()
+		_update_thought_bubble()
 
 # --- УПРАВЛЕНИЕ АНИМАЦИЕЙ ---
 
@@ -1098,8 +1116,14 @@ func _soft_move_to(target_pos: Vector3) -> void:
 func _begin_drop_think() -> void:
 	current_state = State.IDLE
 	_awaiting_drop_decide = true
-	# v2: think 2–5 сек
-	_drop_think_left = randf_range(2.0, 5.0)
+	var tmin: float = 2.0
+	var tmax: float = 5.0
+	if ConfigLoader:
+		tmin = float(ConfigLoader.get_character_value("base_stats", "think_time_min", tmin))
+		tmax = float(ConfigLoader.get_character_value("base_stats", "think_time_max", tmax))
+	if tmax < tmin:
+		tmax = tmin
+	_drop_think_left = randf_range(tmin, tmax)
 	if data:
 		print("[Character] %s drop-think %.1fs (site=%s)" % [
 			data.character_name,
@@ -1289,6 +1313,14 @@ func is_near_campfire_rest() -> bool:
 
 
 func go_work(site: Node3D) -> void:
+	if not site or not is_instance_valid(site):
+		return
+	# harvest / clear / build: как drop — think → remember → work|wander
+	var cat := WorkSite.get_category(site)
+	if cat in ["harvest", "clear", "build"]:
+		on_context_drop(site, site.global_position)
+		return
+	# склад / костёр — сразу
 	start_work_at(site)
 
 
@@ -1760,3 +1792,148 @@ func _update_dev_ui() -> void:
 		]
 	
 	dev_label.text = text_info
+
+
+# --- THOUGHTS / BUBBLE ---
+
+func _load_thought_cfg() -> void:
+	if _thought_cfg_loaded:
+		return
+	_thought_cfg_loaded = true
+	if not ConfigLoader:
+		return
+	_th_hunger_thr = float(ConfigLoader.get_character_value("thoughts", "hunger_threshold", _th_hunger_thr))
+	_th_bubble_path = str(ConfigLoader.get_character_value("thoughts", "bubble_path", _th_bubble_path)).replace('"', "")
+	_th_icon_food = str(ConfigLoader.get_character_value("thoughts", "icon_food_path", _th_icon_food)).replace('"', "")
+	_th_icon_tent = str(ConfigLoader.get_character_value("thoughts", "icon_tent_path", _th_icon_tent)).replace('"', "")
+	_th_icon_bonfire = str(ConfigLoader.get_character_value("thoughts", "icon_bonfire_path", _th_icon_bonfire)).replace('"', "")
+	_th_bubble_h = float(ConfigLoader.get_character_value("thoughts", "bubble_height", _th_bubble_h))
+	_th_bubble_px = float(ConfigLoader.get_character_value("thoughts", "bubble_pixel_size", _th_bubble_px))
+	_th_icon_px = float(ConfigLoader.get_character_value("thoughts", "icon_pixel_size", _th_icon_px))
+	_th_icon_y = float(ConfigLoader.get_character_value("thoughts", "icon_local_y", _th_icon_y))
+
+
+func _setup_thought_bubble() -> void:
+	_load_thought_cfg()
+	if _thought_root and is_instance_valid(_thought_root):
+		return
+	_thought_root = Node3D.new()
+	_thought_root.name = "ThoughtBubble"
+	_thought_root.position = Vector3(0.0, _th_bubble_h, 0.0)
+	add_child(_thought_root)
+
+	_thought_bubble = Sprite3D.new()
+	_thought_bubble.name = "Bubble"
+	_thought_bubble.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	_thought_bubble.pixel_size = _th_bubble_px
+	_thought_bubble.centered = true
+	_thought_bubble.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR
+	if ResourceLoader.exists(_th_bubble_path):
+		_thought_bubble.texture = load(_th_bubble_path) as Texture2D
+	_thought_root.add_child(_thought_bubble)
+
+	_thought_icon = Sprite3D.new()
+	_thought_icon.name = "Icon"
+	_thought_icon.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	_thought_icon.pixel_size = _th_icon_px
+	_thought_icon.centered = true
+	_thought_icon.position = Vector3(0.0, _th_icon_y, 0.02)
+	_thought_icon.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR
+	_thought_root.add_child(_thought_icon)
+
+	_thought_root.visible = false
+
+
+## { "id": "need_food", "icon": path, "text_id": "NEED_FOOD" } or empty
+func get_thought() -> Dictionary:
+	_load_thought_cfg()
+	if current_state == State.DEAD or current_state == State.EATING:
+		return {}
+	if is_being_dragged:
+		return {}
+	if data == null:
+		return {}
+	# приоритет: еда > костёр(ночь) > шалаш
+	# 1) еда
+	if float(data.hunger) >= _th_hunger_thr:
+		return {
+			"id": "need_food",
+			"icon": _th_icon_food,
+			"text_id": "NEED_FOOD",
+		}
+	# 2) ночь → костёр (если ещё не у огня)
+	if _is_night_thought():
+		if not (has_method("is_near_campfire_rest") and is_near_campfire_rest()):
+			return {
+				"id": "need_campfire",
+				"icon": _th_icon_bonfire,
+				"text_id": "NEED_CAMPFIRE",
+			}
+	# 3) недостроенный шалаш
+	if _has_unbuilt_shelter():
+		return {
+			"id": "need_shelter",
+			"icon": _th_icon_tent,
+			"text_id": "NEED_SHELTER",
+		}
+	return {}
+
+
+func _is_night_thought() -> bool:
+	if TimeManager == null:
+		return false
+	if TimeManager.has_method("is_night"):
+		return bool(TimeManager.is_night())
+	if TimeManager.has_method("is_rest_time"):
+		return bool(TimeManager.is_rest_time())
+	return false
+
+
+func _has_unbuilt_shelter() -> bool:
+	var tree := get_tree()
+	if tree == null:
+		return false
+	for n in tree.get_nodes_in_group("shelter"):
+		if not is_instance_valid(n):
+			continue
+		if "is_built" in n and not bool(n.is_built):
+			return true
+		if n.has_method("needs_wood") and bool(n.needs_wood()):
+			return true
+	return false
+
+
+func get_thought_message() -> String:
+	var th: Dictionary = get_thought()
+	if th.is_empty():
+		return ""
+	var tid: String = str(th.get("text_id", ""))
+	var nm: String = str(data.character_name) if data else "?"
+	if Loc and Loc.has_method("t"):
+		return Loc.t(tid, {"name": nm})
+	# fallback EN
+	if tid == "NEED_FOOD":
+		return "%s is hungry — send them to the stocks" % nm
+	if tid == "NEED_CAMPFIRE":
+		return "%s is afraid of the dark — send them to the campfire" % nm
+	if tid == "NEED_SHELTER":
+		return "%s wants a shelter — send them to build (wood → shelter)" % nm
+	return tid
+
+
+func _update_thought_bubble() -> void:
+	if _thought_root == null or not is_instance_valid(_thought_root):
+		_setup_thought_bubble()
+	var th: Dictionary = get_thought()
+	var id: String = str(th.get("id", "")) if not th.is_empty() else ""
+	if id == "":
+		_thought_id = ""
+		_thought_root.visible = false
+		return
+	_thought_root.visible = true
+	if id != _thought_id:
+		_thought_id = id
+		var ipath: String = str(th.get("icon", ""))
+		if _thought_icon and ResourceLoader.exists(ipath):
+			_thought_icon.texture = load(ipath) as Texture2D
+	_thought_root.position.y = _th_bubble_h

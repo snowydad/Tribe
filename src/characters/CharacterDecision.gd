@@ -1,8 +1,7 @@
 # ==============================================================================
 # CharacterDecision.gd — решения (eat / deliver / harvest / drop). Движение — host.
-# ОБНОВЛЕНО: 2026-10-17 — night rest shelter first
+# ОБНОВЛЕНО: 2026-10-20 — talent→work, no talent→wander
 # ==============================================================================
-class_name CharacterDecision
 extends RefCounted
 
 var host: CharacterBody3D
@@ -216,11 +215,12 @@ func should_eat_from_storage() -> bool:
 
 
 func should_go_harvest() -> bool:
+	# Сбор: руки пусты + знает куст + склад не full.
+	# НЕ блокируем из‑за «на складе уже еда» / «сыт» — иначе никто не запасает.
+	# Голод → EAT (ensure_eat_task) приоритетнее в process_idle.
 	if hands_busy() or not _data():
 		return false
-	if _data().hunger <= 25.0:
-		return false
-	if storage_has_food() or storage_is_full():
+	if storage_is_full():
 		return false
 	return knows_harvest()
 
@@ -509,13 +509,14 @@ func resolve_after_drop(drop_site: Node3D = null) -> void:
 						host.go_work(cur.target_node)
 						return
 
-	# 2) drop on object
+	# 2) drop/click on object: всегда remember → talent? work : wander (потом work из idle)
 	if drop_site and is_instance_valid(drop_site):
-		if has_talent_for_site(drop_site) or remembers_site(drop_site):
-			host.start_work_at(drop_site)
-			return
 		remember_site(drop_site)
-		host.wander_nearby()
+		if has_talent_for_site(drop_site):
+			host.start_work_at(drop_site)
+		else:
+			# без таланта: погулял → process_idle/knows_harvest → work
+			host.wander_nearby()
 		drop_eat_if_hungry()
 		return
 

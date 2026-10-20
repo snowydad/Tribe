@@ -146,6 +146,13 @@ func _format_character_block() -> String:
 		lines.append(death_line)
 	# speed / work / velocity
 	lines.append(_format_speeds_line())
+	# thought (need_food …)
+	var thought_msg := ""
+	if _selected.has_method("get_thought_message"):
+		thought_msg = str(_selected.get_thought_message())
+	if thought_msg != "":
+		lines.append("")
+		lines.append(thought_msg)
 	return "\n".join(lines)
 
 ## Навыки, которые перс реально качал (level>0 или exp>0)
