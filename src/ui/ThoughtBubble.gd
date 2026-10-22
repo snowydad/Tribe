@@ -14,7 +14,7 @@ extends Node3D
 @export_group("Textures")
 @export var bubble_texture: Texture2D
 @export var icon_food: Texture2D
-@export var icon_tent: Texture2D
+@export var icon_shelter: Texture2D
 @export var icon_campfire: Texture2D
 
 @onready var _bubble: Sprite3D = $Bubble
@@ -118,7 +118,7 @@ func set_thought(id: String) -> void:
 		"need_campfire":
 			tex = icon_campfire
 		"need_shelter":
-			tex = icon_tent
+			tex = icon_shelter
 		_:
 			tex = icon_food
 	if tex == null:
@@ -129,7 +129,7 @@ func set_thought(id: String) -> void:
 			"need_campfire":
 				path = "res://assets/ui/icon_campfire.png"
 			"need_shelter":
-				path = "res://assets/ui/icon_tent.png"
+				path = "res://assets/ui/icon_shelter.png"
 		if path != "" and ResourceLoader.exists(path):
 			tex = load(path) as Texture2D
 	if _icon and tex:

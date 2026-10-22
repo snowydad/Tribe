@@ -1,69 +1,69 @@
-[gd_scene load_steps=6 format=3]
+[gd_scene format=3 uid="uid://n5yr7yho87tw"]
 
-[ext_resource type="Script" path="res://src/environment/shelter.gd" id="1_script"]
+[ext_resource type="Script" uid="uid://8aqxwbcuwfo2" path="res://src/environment/shelter.gd" id="1_script"]
 
 [sub_resource type="BoxMesh" id="BoxMesh"]
 size = Vector3(2.2, 1.4, 2.2)
 
-[sub_resource type="BoxShape3D" id="BoxBody"]
-size = Vector3(2.0, 1.2, 2.0)
-
-[sub_resource type="BoxShape3D" id="BoxInteract"]
-size = Vector3(3.5, 2.0, 3.5)
-
 [sub_resource type="BoxMesh" id="RoofMesh"]
 size = Vector3(2.6, 0.15, 2.6)
 
-[node name="Shelter" type="Node3D"]
+[sub_resource type="BoxShape3D" id="BoxBody"]
+size = Vector3(2, 1.2, 2)
+
+[sub_resource type="BoxShape3D" id="BoxInteract"]
+size = Vector3(3.5, 2, 3.5)
+
+[node name="Shelter" type="Node3D" unique_id=1883681731]
 script = ExtResource("1_script")
 
-[node name="MeshInstance3D" type="MeshInstance3D" parent="."]
+[node name="MeshInstance3D" type="MeshInstance3D" parent="." unique_id=1946968975]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.7, 0)
 mesh = SubResource("BoxMesh")
 
-[node name="Roof" type="MeshInstance3D" parent="."]
+[node name="Roof" type="MeshInstance3D" parent="." unique_id=1671370700]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.5, 0)
 mesh = SubResource("RoofMesh")
 
-[node name="StaticBody3D" type="StaticBody3D" parent="."]
+[node name="StaticBody3D" type="StaticBody3D" parent="." unique_id=1095622573]
 collision_layer = 4
 collision_mask = 0
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="StaticBody3D"]
+[node name="CollisionShape3D" type="CollisionShape3D" parent="StaticBody3D" unique_id=861419098]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.6, 0)
 shape = SubResource("BoxBody")
 
-[node name="InteractiveArea" type="Area3D" parent="."]
+[node name="InteractiveArea" type="Area3D" parent="." unique_id=402632576]
 collision_layer = 4
 collision_mask = 0
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="InteractiveArea"]
+[node name="CollisionShape3D" type="CollisionShape3D" parent="InteractiveArea" unique_id=808272933]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.8, 0)
 shape = SubResource("BoxInteract")
 
-[node name="WorkPoints" type="Node3D" parent="."]
+[node name="WorkPoints" type="Node3D" parent="." unique_id=54495044]
 
-[node name="WP_N" type="Marker3D" parent="WorkPoints"]
+[node name="WP_N" type="Marker3D" parent="WorkPoints" unique_id=203443749]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -1.8)
 
-[node name="WP_S" type="Marker3D" parent="WorkPoints"]
+[node name="WP_S" type="Marker3D" parent="WorkPoints" unique_id=328551370]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1.8)
 
-[node name="SleepPoints" type="Node3D" parent="."]
+[node name="SleepPoints" type="Node3D" parent="." unique_id=1815803298]
 
-[node name="Bed_0" type="Marker3D" parent="SleepPoints"]
+[node name="Bed_0" type="Marker3D" parent="SleepPoints" unique_id=1130507427]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.5, 0.1, -0.4)
 
-[node name="Bed_1" type="Marker3D" parent="SleepPoints"]
+[node name="Bed_1" type="Marker3D" parent="SleepPoints" unique_id=556104280]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.5, 0.1, -0.4)
 
-[node name="Bed_2" type="Marker3D" parent="SleepPoints"]
+[node name="Bed_2" type="Marker3D" parent="SleepPoints" unique_id=1617257405]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.5, 0.1, 0.5)
 
-[node name="Bed_3" type="Marker3D" parent="SleepPoints"]
+[node name="Bed_3" type="Marker3D" parent="SleepPoints" unique_id=1638821276]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.5, 0.1, 0.5)
 
-[node name="DevLabel" type="Label3D" parent="."]
+[node name="DevLabel" type="Label3D" parent="." unique_id=1148876685]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.2, 0)
 billboard = 1
 text = "Shelter"
