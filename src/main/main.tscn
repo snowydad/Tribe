@@ -156,6 +156,9 @@ script = ExtResource("11_erw1m")
 [node name="Debris" parent="." unique_id=1474345084 instance=ExtResource("13_ibsor")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5.411136, 1.3161111, 17.174911)
 
+[node name="Debris2" parent="." unique_id=1679283341 instance=ExtResource("13_ibsor")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6.683697, 1.3161111, 17.174911)
+
 [node name="Campfire" parent="." unique_id=743318931 instance=ExtResource("14_hc2u7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.5540747, 1.5754921, 30.798878)
 

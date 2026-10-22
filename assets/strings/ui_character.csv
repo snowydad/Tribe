@@ -1,4 +1,4 @@
 id,comment,ru,en
 NEED_FOOD,hunger thought,"{name} проголодался, отправьте его к запасам (stocks)","{name} is hungry — send them to the stocks"
-NEED_CAMPFIRE,night rest by fire,"{name} боится темноты — отправьте к костру","{name} is afraid of the dark — send them to the campfire"
+NEED_CAMPFIRE,night fire,"{name} нужен огонь — к костру (или подкинь дров)","{name} needs fire — go to the campfire (or add wood)"
 NEED_SHELTER,unbuilt shelter,"{name} хочет шалаш — отправьте строить (wood → shelter)","{name} wants a shelter — send them to build (wood → shelter)"

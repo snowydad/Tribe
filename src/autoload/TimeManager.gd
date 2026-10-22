@@ -114,6 +114,12 @@ func is_night() -> bool:
 	return is_night_hour(get_game_hour())
 
 
+## Вечер+ночь: [day_end … 24) + [0 … dawn_start)
+func is_rest_time() -> bool:
+	var h: float = fposmod(get_game_hour(), 24.0)
+	return h >= day_end or h < dawn_start
+
+
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_CLOSE_REQUEST or what == NOTIFICATION_APPLICATION_PAUSED:
 		_save_current_timestamp()

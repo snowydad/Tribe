@@ -1,0 +1,31 @@
+[gd_scene format=3 uid="uid://cm3pwm2oml0hb"]
+
+[ext_resource type="Script" uid="uid://u0fmxmeoqi6y" path="res://src/ui/ThoughtBubble.gd" id="1_tb"]
+[ext_resource type="Texture2D" uid="uid://cr4jvc2c50w6q" path="res://assets/ui/thought_bubble.png" id="2_bub"]
+[ext_resource type="Texture2D" uid="uid://dsh4kix7136f6" path="res://assets/ui/icon_food.png" id="3_food"]
+[ext_resource type="Texture2D" uid="uid://cddte1xwvajps" path="res://assets/ui/icon_tent.png" id="4_tent"]
+[ext_resource type="Texture2D" uid="uid://pk7t0ndy3u41" path="res://assets/ui/icon_campfire.png" id="5_fire"]
+
+[node name="ThoughtBubble" type="Node3D" unique_id=886856035]
+script = ExtResource("1_tb")
+height_m = 1.25
+offset_x = 0.5
+width_m = 1.0
+bubble_texture = ExtResource("2_bub")
+icon_food = ExtResource("3_food")
+icon_tent = ExtResource("4_tent")
+icon_campfire = ExtResource("5_fire")
+
+[node name="Bubble" type="Sprite3D" parent="." unique_id=247102341]
+pixel_size = 0.0015
+billboard = 1
+render_priority = 10
+texture = ExtResource("2_bub")
+
+[node name="Icon" type="Sprite3D" parent="." unique_id=527675368]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.10906196, 0)
+pixel_size = 0.0015
+billboard = 1
+no_depth_test = true
+render_priority = 16
+texture = ExtResource("3_food")
