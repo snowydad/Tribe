@@ -1,0 +1,61 @@
+[gd_scene format=3 uid="uid://dc0hae4doiydd"]
+
+[ext_resource type="Script" uid="uid://fsuwfjpaqsxd" path="res://src/tech/TechTreeGraphEdit.gd" id="1_h8v5t"]
+
+[node name="TechTreeRoot" type="Node2D" unique_id=1035154558]
+
+[node name="Tech_Tree" type="GraphEdit" parent="." unique_id=426573269]
+offset_left = 3.0
+offset_top = 11.0
+offset_right = 1158.0
+offset_bottom = 649.0
+right_disconnects = true
+script = ExtResource("1_h8v5t")
+
+[node name="Tech_Campfire" type="GraphNode" parent="Tech_Tree" unique_id=1650144690]
+layout_mode = 0
+offset_left = 143.0
+offset_top = 188.0
+offset_right = 332.0
+offset_bottom = 293.0
+mouse_filter = 1
+position_offset = Vector2(143, 188)
+resizable = true
+title = "Campfire"
+slot/0/left_enabled = false
+slot/0/left_type = 0
+slot/0/left_color = Color(1, 1, 1, 1)
+slot/0/left_icon = null
+slot/0/right_enabled = true
+slot/0/right_type = 0
+slot/0/right_color = Color(1, 1, 1, 1)
+slot/0/right_icon = null
+slot/0/draw_stylebox = true
+
+[node name="Label" type="Label" parent="Tech_Tree/Tech_Campfire" unique_id=909372272]
+layout_mode = 2
+text = "Campfire"
+
+[node name="Tech_Shelter" type="GraphNode" parent="Tech_Tree" unique_id=1809215361]
+layout_mode = 0
+offset_left = 438.0
+offset_top = 214.0
+offset_right = 629.0
+offset_bottom = 319.0
+mouse_filter = 1
+position_offset = Vector2(438, 214)
+resizable = true
+title = "Shelter"
+slot/0/left_enabled = true
+slot/0/left_type = 0
+slot/0/left_color = Color(1, 1, 1, 1)
+slot/0/left_icon = null
+slot/0/right_enabled = true
+slot/0/right_type = 0
+slot/0/right_color = Color(1, 1, 1, 1)
+slot/0/right_icon = null
+slot/0/draw_stylebox = true
+
+[node name="Label" type="Label" parent="Tech_Tree/Tech_Shelter" unique_id=261984748]
+layout_mode = 2
+text = "Shelter"
