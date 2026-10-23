@@ -2,22 +2,22 @@
   "campfire": {
     "category": "fire",
     "research_cost": 10,
-    "pos_x": 50,
-    "pos_y": 64,
+    "pos_x": 70,
+    "pos_y": -274,
     "prerequisites": []
   },
   "foraging": {
     "category": "food",
     "research_cost": 10,
-    "pos_x": 58,
-    "pos_y": 313,
+    "pos_x": 36,
+    "pos_y": 150,
     "prerequisites": []
   },
   "fire_pit": {
     "category": "fire",
     "research_cost": 20,
-    "pos_x": 568,
-    "pos_y": 47,
+    "pos_x": 564,
+    "pos_y": -185,
     "prerequisites": [
       "campfire",
       "foraging"
@@ -26,8 +26,8 @@
   "garden": {
     "category": "food",
     "research_cost": 20,
-    "pos_x": 543,
-    "pos_y": 322,
+    "pos_x": 549,
+    "pos_y": 138,
     "prerequisites": [
       "foraging"
     ]
@@ -35,15 +35,15 @@
   "shelter": {
     "category": "housing",
     "research_cost": 10,
-    "pos_x": 49,
-    "pos_y": 571,
+    "pos_x": 44,
+    "pos_y": 445,
     "prerequisites": []
   },
   "cabin": {
     "category": "housing",
     "research_cost": 20,
-    "pos_x": 554,
-    "pos_y": 583,
+    "pos_x": 536,
+    "pos_y": 438,
     "prerequisites": [
       "shelter"
     ]
@@ -51,15 +51,15 @@
   "club": {
     "category": "craft",
     "research_cost": 10,
-    "pos_x": 60,
-    "pos_y": 869,
+    "pos_x": 58,
+    "pos_y": 852,
     "prerequisites": []
   },
   "reserch_hut": {
     "category": "knowledge",
     "research_cost": 20,
-    "pos_x": 559,
-    "pos_y": 1125,
+    "pos_x": 545,
+    "pos_y": 1312,
     "prerequisites": [
       "shelter"
     ]
@@ -67,8 +67,8 @@
   "healer_hut": {
     "category": "medicine",
     "research_cost": 20,
-    "pos_x": 561,
-    "pos_y": 1377,
+    "pos_x": 532,
+    "pos_y": 1672,
     "prerequisites": [
       "shelter"
     ]
@@ -76,8 +76,8 @@
   "hoe": {
     "category": "craft",
     "research_cost": 20,
-    "pos_x": 557,
-    "pos_y": 865,
+    "pos_x": 534,
+    "pos_y": 843,
     "prerequisites": [
       "club"
     ]
@@ -85,8 +85,8 @@
   "stove": {
     "category": "fire",
     "research_cost": 20,
-    "pos_x": 989,
-    "pos_y": -108,
+    "pos_x": 1192,
+    "pos_y": -364,
     "prerequisites": [
       "fire_pit"
     ]
@@ -94,8 +94,8 @@
   "forge": {
     "category": "fire",
     "research_cost": 20,
-    "pos_x": 989,
-    "pos_y": 193,
+    "pos_x": 1181,
+    "pos_y": -92,
     "prerequisites": [
       "fire_pit",
       "cabin"
@@ -104,8 +104,8 @@
   "cottage": {
     "category": "housing",
     "research_cost": 20,
-    "pos_x": 979,
-    "pos_y": 585,
+    "pos_x": 1216,
+    "pos_y": 436,
     "prerequisites": [
       "cabin"
     ]
@@ -113,8 +113,8 @@
   "school": {
     "category": "knowledge",
     "research_cost": 20,
-    "pos_x": 968,
-    "pos_y": 1124,
+    "pos_x": 1192,
+    "pos_y": 1305,
     "prerequisites": [
       "cabin",
       "reserch_hut"
@@ -123,8 +123,8 @@
   "apothecary": {
     "category": "medicine",
     "research_cost": 20,
-    "pos_x": 1597,
-    "pos_y": 1352,
+    "pos_x": 1900,
+    "pos_y": 1644,
     "prerequisites": [
       "academy",
       "healer_hut"
@@ -133,10 +133,49 @@
   "academy": {
     "category": "knowledge",
     "research_cost": 20,
-    "pos_x": 1271,
-    "pos_y": 1122,
+    "pos_x": 1537,
+    "pos_y": 1309,
     "prerequisites": [
       "school"
+    ]
+  },
+  "fishing": {
+    "category": "craft",
+    "research_cost": 20,
+    "pos_x": 1533,
+    "pos_y": 145,
+    "prerequisites": [
+      "garden",
+      "hoe"
+    ]
+  },
+  "tools": {
+    "category": "craft",
+    "research_cost": 20,
+    "pos_x": 1557,
+    "pos_y": 903,
+    "prerequisites": [
+      "forge",
+      "hoe"
+    ]
+  },
+  "bow": {
+    "category": "fire",
+    "research_cost": 20,
+    "pos_x": 1911,
+    "pos_y": 902,
+    "prerequisites": [
+      "tools"
+    ]
+  },
+  "hunt": {
+    "category": "food",
+    "research_cost": 20,
+    "pos_x": 2360,
+    "pos_y": 155,
+    "prerequisites": [
+      "fishing",
+      "bow"
     ]
   }
 }
