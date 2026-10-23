@@ -1,0 +1,85 @@
+{
+  "campfire": {
+    "category": "fire",
+    "research_cost": 10,
+    "pos_x": 143,
+    "pos_y": 65,
+    "prerequisites": []
+  },
+  "Foraging": {
+    "category": "food",
+    "research_cost": 10,
+    "pos_x": 138,
+    "pos_y": 313,
+    "prerequisites": []
+  },
+  "cooking_pot": {
+    "category": "fire",
+    "research_cost": 20,
+    "pos_x": 540,
+    "pos_y": 61,
+    "prerequisites": [
+      "campfire",
+      "Foraging"
+    ]
+  },
+  "garden": {
+    "category": "food",
+    "research_cost": 20,
+    "pos_x": 543,
+    "pos_y": 322,
+    "prerequisites": [
+      "Foraging"
+    ]
+  },
+  "shelter": {
+    "category": "housing",
+    "research_cost": 10,
+    "pos_x": 134,
+    "pos_y": 575,
+    "prerequisites": []
+  },
+  "cabin": {
+    "category": "housing",
+    "research_cost": 20,
+    "pos_x": 554,
+    "pos_y": 583,
+    "prerequisites": [
+      "shelter"
+    ]
+  },
+  "club": {
+    "category": "craft",
+    "research_cost": 10,
+    "pos_x": 140,
+    "pos_y": 865,
+    "prerequisites": []
+  },
+  "reserch_hut": {
+    "category": "knowledge",
+    "research_cost": 20,
+    "pos_x": 559,
+    "pos_y": 1125,
+    "prerequisites": [
+      "shelter"
+    ]
+  },
+  "healer_hut": {
+    "category": "medicine",
+    "research_cost": 20,
+    "pos_x": 561,
+    "pos_y": 1377,
+    "prerequisites": [
+      "shelter"
+    ]
+  },
+  "hoe": {
+    "category": "fire",
+    "research_cost": 20,
+    "pos_x": 557,
+    "pos_y": 865,
+    "prerequisites": [
+      "club"
+    ]
+  }
+}
