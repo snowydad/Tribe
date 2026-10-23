@@ -2,25 +2,25 @@
   "campfire": {
     "category": "fire",
     "research_cost": 10,
-    "pos_x": 143,
-    "pos_y": 65,
+    "pos_x": 50,
+    "pos_y": 64,
     "prerequisites": []
   },
-  "Foraging": {
+  "foraging": {
     "category": "food",
     "research_cost": 10,
-    "pos_x": 138,
+    "pos_x": 58,
     "pos_y": 313,
     "prerequisites": []
   },
-  "cooking_pot": {
+  "fire_pit": {
     "category": "fire",
     "research_cost": 20,
-    "pos_x": 540,
-    "pos_y": 61,
+    "pos_x": 568,
+    "pos_y": 47,
     "prerequisites": [
       "campfire",
-      "Foraging"
+      "foraging"
     ]
   },
   "garden": {
@@ -29,14 +29,14 @@
     "pos_x": 543,
     "pos_y": 322,
     "prerequisites": [
-      "Foraging"
+      "foraging"
     ]
   },
   "shelter": {
     "category": "housing",
     "research_cost": 10,
-    "pos_x": 134,
-    "pos_y": 575,
+    "pos_x": 49,
+    "pos_y": 571,
     "prerequisites": []
   },
   "cabin": {
@@ -51,8 +51,8 @@
   "club": {
     "category": "craft",
     "research_cost": 10,
-    "pos_x": 140,
-    "pos_y": 865,
+    "pos_x": 60,
+    "pos_y": 869,
     "prerequisites": []
   },
   "reserch_hut": {
@@ -74,12 +74,69 @@
     ]
   },
   "hoe": {
-    "category": "fire",
+    "category": "craft",
     "research_cost": 20,
     "pos_x": 557,
     "pos_y": 865,
     "prerequisites": [
       "club"
+    ]
+  },
+  "stove": {
+    "category": "fire",
+    "research_cost": 20,
+    "pos_x": 989,
+    "pos_y": -108,
+    "prerequisites": [
+      "fire_pit"
+    ]
+  },
+  "forge": {
+    "category": "fire",
+    "research_cost": 20,
+    "pos_x": 989,
+    "pos_y": 193,
+    "prerequisites": [
+      "fire_pit",
+      "cabin"
+    ]
+  },
+  "cottage": {
+    "category": "housing",
+    "research_cost": 20,
+    "pos_x": 979,
+    "pos_y": 585,
+    "prerequisites": [
+      "cabin"
+    ]
+  },
+  "school": {
+    "category": "knowledge",
+    "research_cost": 20,
+    "pos_x": 968,
+    "pos_y": 1124,
+    "prerequisites": [
+      "cabin",
+      "reserch_hut"
+    ]
+  },
+  "apothecary": {
+    "category": "medicine",
+    "research_cost": 20,
+    "pos_x": 1597,
+    "pos_y": 1352,
+    "prerequisites": [
+      "academy",
+      "healer_hut"
+    ]
+  },
+  "academy": {
+    "category": "knowledge",
+    "research_cost": 20,
+    "pos_x": 1271,
+    "pos_y": 1122,
+    "prerequisites": [
+      "school"
     ]
   }
 }
