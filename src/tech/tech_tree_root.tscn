@@ -38,12 +38,12 @@ text = "Campfire"
 
 [node name="Tech_Shelter" type="GraphNode" parent="Tech_Tree" unique_id=1809215361]
 layout_mode = 0
-offset_left = 438.0
-offset_top = 214.0
-offset_right = 629.0
-offset_bottom = 319.0
+offset_left = 452.0
+offset_top = 173.0
+offset_right = 643.0
+offset_bottom = 278.0
 mouse_filter = 1
-position_offset = Vector2(438, 214)
+position_offset = Vector2(452, 173)
 resizable = true
 title = "Shelter"
 slot/0/left_enabled = true

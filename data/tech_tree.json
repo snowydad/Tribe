@@ -1,0 +1,35 @@
+{
+	"edges": [
+		{
+			"from": "campfire",
+			"to": "shelter"
+		}
+	],
+	"nodes": [
+		{
+			"id": "campfire",
+			"label": "Campfire",
+			"left": false,
+			"pos": [
+				143.0,
+				188.0
+			],
+			"right": true,
+			"start_known": true,
+			"title": "Campfire"
+		},
+		{
+			"id": "shelter",
+			"label": "Shelter",
+			"left": true,
+			"pos": [
+				420.0,
+				200.0
+			],
+			"right": true,
+			"start_known": false,
+			"title": "Shelter"
+		}
+	],
+	"version": 1
+}
