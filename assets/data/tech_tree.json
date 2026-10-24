@@ -1,7 +1,7 @@
 {
   "campfire": {
     "category": "fire",
-    "research_cost": 10,
+    "research_cost": 0,
     "pos_x": 70,
     "pos_y": -274,
     "prerequisites": []
@@ -34,7 +34,7 @@
   },
   "shelter": {
     "category": "housing",
-    "research_cost": 10,
+    "research_cost": 0,
     "pos_x": 44,
     "pos_y": 445,
     "prerequisites": []
@@ -50,7 +50,7 @@
   },
   "club": {
     "category": "craft",
-    "research_cost": 10,
+    "research_cost": 0,
     "pos_x": 19,
     "pos_y": 851,
     "prerequisites": []

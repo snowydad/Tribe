@@ -15,7 +15,7 @@
 [ext_resource type="Script" uid="uid://503ly4ypns80" path="res://src/ui/CharacterInfoPanel.gd" id="11_erw1m"]
 [ext_resource type="PackedScene" uid="uid://bqqx8dbr4j38b" path="res://src/environment/debris.tscn" id="13_ibsor"]
 [ext_resource type="PackedScene" uid="uid://0j333howo578" path="res://src/environment/campfire.tscn" id="14_hc2u7"]
-[ext_resource type="PackedScene" path="res://src/environment/shelter.tscn" id="16_nqfqj"]
+[ext_resource type="PackedScene" uid="uid://n5yr7yho87tw" path="res://src/environment/shelter.tscn" id="16_nqfqj"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_frqgp"]
 sky_top_color = Color(0.4618634, 0.53608686, 0.6351234, 1)
@@ -138,20 +138,11 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6.5726643, 1.2753301, 27.521
 [node name="Berries" parent="." unique_id=891666075 instance=ExtResource("9_2nke2")]
 transform = Transform3D(1, 2.4796464e-08, 0, 9.022187e-09, 1.0000001, 2.3283064e-09, 1.4901161e-08, 1.0244548e-08, 1.0000001, 4.39073, 1.3461447, 16.559986)
 
+[node name="Berries2" parent="." unique_id=203966009 instance=ExtResource("9_2nke2")]
+transform = Transform3D(1, 2.4796464e-08, 0, 9.022187e-09, 1.0000001, 2.3283064e-09, 1.4901161e-08, 1.0244548e-08, 1.0000001, -30.451733, 1.5123775, 3.7125072)
+
 [node name="DevObstacle" parent="." unique_id=1725071813 instance=ExtResource("10_km7bn")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -8.349224, 1.3403049, 2.4883356)
-
-[node name="UI" type="CanvasLayer" parent="." unique_id=1004832540]
-layer = 20
-
-[node name="CharacterInfoPanel" type="PanelContainer" parent="UI" unique_id=575196269]
-anchors_preset = 1
-anchor_left = 1.0
-anchor_right = 1.0
-offset_left = -40.0
-offset_bottom = 40.0
-grow_horizontal = 0
-script = ExtResource("11_erw1m")
 
 [node name="Debris" parent="." unique_id=1474345084 instance=ExtResource("13_ibsor")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5.411136, 1.3161111, 17.174911)
@@ -164,3 +155,15 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.5540747, 1.5754921, 30.7988
 
 [node name="Shelter" parent="." unique_id=536551137 instance=ExtResource("16_nqfqj")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8.00086, 1.5027108, 27.58843)
+
+[node name="UI" type="CanvasLayer" parent="." unique_id=1004832540]
+layer = 20
+
+[node name="CharacterInfoPanel" type="PanelContainer" parent="UI" unique_id=575196269]
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -40.0
+offset_bottom = 40.0
+grow_horizontal = 0
+script = ExtResource("11_erw1m")

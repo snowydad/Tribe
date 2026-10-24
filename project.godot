@@ -21,6 +21,7 @@ DevCheatManager="*uid://cyyn702h7flht"
 TimeManager="*uid://bbkaa3ab46oxc"
 Loc="*res://src/autoload/Loc.gd"
 LoggerGlobal="*uid://b11kfwdjy08bs"
+TechTree="*res://src/autoload/TechTree.gd"
 
 [display]
 
