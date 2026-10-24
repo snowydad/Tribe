@@ -3,6 +3,7 @@
 [ext_resource type="PackedScene" uid="uid://27ivc4umqj" path="res://assets/models/sea.glb" id="1_0u6kl"]
 [ext_resource type="PackedScene" uid="uid://cq6jiof8dnrpj" path="res://assets/models/terrain00.glb" id="2_avahw"]
 [ext_resource type="Shader" uid="uid://bjkbvghmk1kh" path="res://src/environment/water.gdshader" id="2_vbb2g"]
+[ext_resource type="Material" uid="uid://m253fhpxo7bn" path="res://assets/materials/M_Sea.tres" id="4_cavv6"]
 
 [sub_resource type="NoiseTexture2D" id="NoiseTexture2D_vbb2g"]
 
@@ -103,6 +104,7 @@ shape = SubResource("ConcavePolygonShape3D_ucpde")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 48)
 material_override = SubResource("ShaderMaterial_vbb2g")
 mesh = SubResource("PlaneMesh_j07er")
+surface_material_override/0 = ExtResource("4_cavv6")
 
 [editable path="sea"]
 [editable path="NavigationRegion3D/terrain00"]

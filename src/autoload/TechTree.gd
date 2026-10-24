@@ -1,7 +1,8 @@
 # ==============================================================================
 # TechTree.gd — runtime tech tree from assets/data/tech_tree.json
+# RP = Research Points (все персы вкладывают; пока 1 RP за полезную работу)
 # known = techs with empty prerequisites at start
-# ОБНОВЛЕНО: 2026-10-24
+# ОБНОВЛЕНО: 2026-10-24 — KP → RP
 # ==============================================================================
 extends Node
 
@@ -13,15 +14,14 @@ var _defs: Dictionary = {}
 ## открытые технологии (id -> true)
 var _known: Dictionary = {}
 
-## очки исследования (заглушка; позже hut / события)
-var knowledge_points: float = 0.0
+## Research Points (RP) — валюта research_cost
+var research_points: float = 0.0
 
 
 func _ready() -> void:
 	reload()
 
 
-## Перечитать JSON и сбросить known на roots
 func reload() -> void:
 	_defs.clear()
 	_known.clear()
@@ -65,8 +65,6 @@ func _init_roots_known() -> void:
 			_known[id] = true
 
 
-# --- queries ---
-
 func has_def(id: String) -> bool:
 	return _defs.has(id)
 
@@ -96,7 +94,6 @@ func is_known(id: String) -> bool:
 	return bool(_known.get(id, false))
 
 
-## все prerequisites known (и tech существует)
 func can_research(id: String) -> bool:
 	if not _defs.has(id):
 		return false
@@ -109,20 +106,16 @@ func can_research(id: String) -> bool:
 	return true
 
 
-## хватает knowledge_points на research_cost
 func can_afford(id: String) -> bool:
 	if not _defs.has(id):
 		return false
-	return knowledge_points >= float(_defs[id].get("research_cost", 0))
+	return research_points >= float(_defs[id].get("research_cost", 0))
 
 
-## can_research + can_afford
 func can_unlock(id: String) -> bool:
 	return can_research(id) and can_afford(id)
 
 
-## Открыть tech. spend_cost: списать research_cost с knowledge_points
-## return true если открыли
 func research(id: String, spend_cost: bool = true) -> bool:
 	if is_known(id):
 		return false
@@ -131,23 +124,27 @@ func research(id: String, spend_cost: bool = true) -> bool:
 	if spend_cost:
 		if not can_afford(id):
 			return false
-		knowledge_points -= float(_defs[id].get("research_cost", 0))
+		research_points -= float(_defs[id].get("research_cost", 0))
 	_known[id] = true
-	print("[TechTree] researched: %s (kp=%.0f)" % [id, knowledge_points])
+	print("[TechTree] researched: %s (RP=%.0f)" % [id, research_points])
 	return true
 
 
-## dev/cheat: выдать без проверок
 func force_know(id: String) -> void:
 	if _defs.has(id):
 		_known[id] = true
 
 
-func add_knowledge(amount: float) -> void:
-	knowledge_points += amount
+## +RP (полезный труд, dev-кнопка, later per-talent)
+func add_research_points(amount: float) -> void:
+	research_points += amount
 
 
-## id, у которых can_research (ещё не known)
+## 1 RP за завершённый полезный цикл работы
+func award_work_rp(amount: float = 1.0) -> void:
+	add_research_points(amount)
+
+
 func get_available_ids() -> PackedStringArray:
 	var out := PackedStringArray()
 	for id in _defs.keys():

@@ -42,6 +42,12 @@ func _input(event: InputEvent) -> void:
 	if not (event is InputEventMouseButton or event is InputEventMouseMotion):
 		return
 
+		# UI (Research, panels) first — иначе клик не доходит до Button
+	if not is_dragging_character:
+		var hovered: Control = get_viewport().gui_get_hovered_control()
+		if hovered != null:
+			return
+
 	if is_dragging_character and event is InputEventMouseMotion:
 		get_viewport().set_input_as_handled()
 		return

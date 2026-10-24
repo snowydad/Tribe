@@ -798,6 +798,12 @@ func _at_work_point(_site: Node3D = null) -> bool:
 
 # --- РАБОЧИЕ ПРОЦЕССЫ ---
 
+
+## +1 RP за полезный цикл (gather/deposit/clear/stoke). Не wander/idle/eat.
+func _award_work_rp() -> void:
+	if TechTree and TechTree.has_method("award_work_rp"):
+		TechTree.award_work_rp(1.0)
+
 func _process_gathering(delta: float) -> void:
 	if not target_harvest or not is_instance_valid(target_harvest):
 		current_state = State.IDLE
@@ -838,6 +844,7 @@ func _process_gathering(delta: float) -> void:
 			data.add_skill_xp(xp_skill, xp_per_cycle)
 		elif data.has_method("add_skill_exp"):
 			data.add_skill_exp(xp_skill, xp_per_cycle)
+		_award_work_rp()
 
 		decision.resolve_cargo_action()
 
@@ -916,6 +923,7 @@ func _process_delivering_unload(delta: float) -> void:
 			data.add_skill_xp(xp_skill, xp_per_cycle)
 		elif data.has_method("add_skill_exp"):
 			data.add_skill_exp(xp_skill, xp_per_cycle)
+		_award_work_rp()
 		var take = result.get("take", {})
 		if task_manager:
 			task_manager.complete_current_task()
@@ -971,6 +979,7 @@ func _process_stoking_unload(delta: float) -> void:
 			data.add_skill_xp(sk, xp)
 		elif data.has_method("add_skill_exp"):
 			data.add_skill_exp(sk, xp)
+		_award_work_rp()
 	# ещё нужно?
 	if fire.has_method("needs_fuel") and fire.needs_fuel():
 		if data.item_amount > 0 and str(data.carried_item).to_lower() in ["wood", "log"]:
@@ -1023,6 +1032,7 @@ func _process_clearing(delta: float) -> void:
 			data.add_skill_xp("worker", xp_per_cycle)
 		elif data.has_method("add_skill_exp"):
 			data.add_skill_exp("worker", xp_per_cycle)
+		_award_work_rp()
 
 		print("[Character] Cleared obstacle!")
 
