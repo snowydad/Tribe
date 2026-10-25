@@ -1,7 +1,7 @@
 # ==============================================================================
 # CharacterNavigation.gd — HOW: path / stuck / face / RVO
 # WHAT — Decision / Task / character.start_* → go_to
-# ОБНОВЛЕНО: 2026-10-17 — extract from character.gd (94a09ca + Nav fix)
+# ОБНОВЛЕНО: 2026-10-24 — no per-frame get_path (FPS night vs day)
 # ==============================================================================
 extends Node
 class_name CharacterNavigation
@@ -78,7 +78,6 @@ func go_to(world_pos: Vector3) -> void:
 		_last_pos_xz = Vector2(host.global_position.x, host.global_position.z)
 	if agent:
 		agent.target_position = world_pos
-		call_deferred("refresh_path")
 		refresh_path()
 
 
@@ -103,9 +102,8 @@ func tick(delta: float) -> void:
 	var pos_xz := Vector2(current_pos.x, current_pos.z)
 	var dist_to_final: float = pos_xz.distance_to(Vector2(goal.x, goal.z))
 
-	# agent path + debug
-	agent.target_position = goal
-	var _agent_next: Vector3 = agent.get_next_path_position()
+	# НЕ каждый кадр target_position / get_path — это убивало FPS при 30 ходящих
+	# path уже в _nav_path; repath только stuck / refresh_path / go_to
 
 	if dist_to_final <= arrival_distance:
 		_stop_h(delta)
@@ -169,12 +167,8 @@ func tick(delta: float) -> void:
 	else:
 		_stuck_t = 0.0
 
-	var agent_path: PackedVector3Array = agent.get_current_navigation_path()
-	if not agent_path.is_empty():
-		if _nav_path.is_empty() or agent_path.size() != _nav_path.size():
-			_nav_path = agent_path
-			_nav_path_i = mini(_nav_path_i, maxi(_nav_path.size() - 1, 0))
-	elif _nav_path.is_empty():
+	# path только если пусто (редко)
+	if _nav_path.is_empty():
 		refresh_path()
 
 	var aim: Vector3 = goal

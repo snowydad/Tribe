@@ -43,6 +43,9 @@ var target_campfire: Node3D = null
 const ThoughtBubbleScene = preload("res://src/ui/thought_bubble.tscn")
 var _thought_ui: Node3D = null
 var _th_hunger_thr: float = 50.0
+var _th_world_cache_t: float = 0.0
+var _th_has_campfire: bool = false
+var _th_has_unbuilt_shelter: bool = false
 var _th_cfg_loaded: bool = false
 
 var _current_target_pos: Vector3 = Vector3.ZERO
@@ -319,7 +322,7 @@ func _physics_process(delta: float) -> void:
 	_update_animation()
 	# DevLabel не каждый кадр — меньше аллокаций строк (важно при нескольких персах)
 	_dev_ui_timer += delta
-	if _dev_ui_timer >= 0.2:
+	if _dev_ui_timer >= 0.5:
 		_dev_ui_timer = 0.0
 		_update_dev_ui()
 		_update_thought_bubble()
@@ -505,18 +508,22 @@ func _dampen_horizontal(delta: float) -> void:
 		_stop_horizontal_movement(delta)
 
 
-## Идущий толкает стоящего / более медленного
+## Идущий толкает стоящего. O(n²) → stagger 3 кадра, без move_and_slide на other
 func _push_peers(delta: float) -> void:
 	if current_state == State.DEAD or current_state == State.CARRIED or is_being_dragged:
 		return
 	if not is_on_floor():
 		return
+	# 30 персов × каждый кадр × n = смерть FPS
+	if (Engine.get_physics_frames() + int(get_instance_id())) % 3 != 0:
+		return
 	var my_spd := Vector2(velocity.x, velocity.z).length()
 	if my_spd < push_min_speed:
-		return  # стою — не толкаю
+		return
 	var tree := get_tree()
 	if tree == null:
 		return
+	var r2: float = push_radius * push_radius
 	for n in tree.get_nodes_in_group("character"):
 		if n == self or not is_instance_valid(n):
 			continue
@@ -527,25 +534,27 @@ func _push_peers(delta: float) -> void:
 			continue
 		if "is_being_dragged" in other and other.is_being_dragged:
 			continue
-		var offset: Vector3 = other.global_position - global_position
-		offset.y = 0.0
-		var dist: float = offset.length()
-		if dist > push_radius or dist < 0.001:
+		var ox: float = other.global_position.x - global_position.x
+		var oz: float = other.global_position.z - global_position.z
+		var d2: float = ox * ox + oz * oz
+		if d2 > r2 or d2 < 0.000001:
 			continue
 		var other_spd := Vector2(other.velocity.x, other.velocity.z).length()
 		if other_spd >= my_spd * 0.95:
 			continue
-		var dir: Vector3 = offset / dist
+		var dist: float = sqrt(d2)
+		var dir_x: float = ox / dist
+		var dir_z: float = oz / dist
 		var w: float = 1.0 - (dist / push_radius)
-		var impulse: float = push_strength * w * my_spd * delta * 10.0
+		var impulse: float = push_strength * w * my_spd * delta * 10.0 * 3.0  # *3 из-за stagger
 		if other_spd < 0.05:
 			impulse *= 1.5
-		other.velocity.x += dir.x * impulse
-		other.velocity.z += dir.z * impulse
+		other.velocity.x += dir_x * impulse
+		other.velocity.z += dir_z * impulse
 		other.set("_pushed_t", 0.5)
-		other.move_and_slide()
-		velocity.x -= dir.x * impulse * 0.15
-		velocity.z -= dir.z * impulse * 0.15
+		# НЕ move_and_slide(other) — их physics сам сдвинет
+		velocity.x -= dir_x * impulse * 0.15
+		velocity.z -= dir_z * impulse * 0.15
 
 
 func _safe_rotate_towards(target_node, delta: float) -> void:
@@ -1855,13 +1864,8 @@ func _is_night_thought() -> bool:
 
 
 func _has_campfire() -> bool:
-	var tree := get_tree()
-	if tree == null:
-		return false
-	for n in tree.get_nodes_in_group("campfire"):
-		if is_instance_valid(n):
-			return true
-	return false
+	_refresh_thought_world_cache()
+	return _th_has_campfire
 
 
 func _needs_campfire_thought() -> bool:
@@ -1884,17 +1888,34 @@ func _needs_campfire_thought() -> bool:
 
 
 func _has_unbuilt_shelter() -> bool:
+	_refresh_thought_world_cache()
+	return _th_has_unbuilt_shelter
+
+
+func _refresh_thought_world_cache() -> void:
+	# раз в 1с на перса, не каждый thought-tick
+	var now: float = Time.get_ticks_msec() * 0.001
+	if now - _th_world_cache_t < 1.0 and _th_world_cache_t > 0.0:
+		return
+	_th_world_cache_t = now
+	_th_has_campfire = false
+	_th_has_unbuilt_shelter = false
 	var tree := get_tree()
 	if tree == null:
-		return false
+		return
+	for n in tree.get_nodes_in_group("campfire"):
+		if is_instance_valid(n):
+			_th_has_campfire = true
+			break
 	for n in tree.get_nodes_in_group("shelter"):
 		if not is_instance_valid(n):
 			continue
 		if "is_built" in n and not bool(n.is_built):
-			return true
+			_th_has_unbuilt_shelter = true
+			break
 		if n.has_method("needs_wood") and bool(n.needs_wood()):
-			return true
-	return false
+			_th_has_unbuilt_shelter = true
+			break
 
 
 func get_thought_message() -> String:

@@ -58,6 +58,8 @@ func _capture_base() -> void:
 
 
 func _process(_delta: float) -> void:
+	if not visible:
+		return
 	_follow_host()
 
 
@@ -110,6 +112,8 @@ func set_thought(id: String) -> void:
 	if id.is_empty():
 		clear()
 		return
+	if id == _current_id and visible:
+		return
 	visible = true
 	var tex: Texture2D = null
 	match id:
@@ -142,3 +146,4 @@ func set_thought(id: String) -> void:
 func clear() -> void:
 	_current_id = ""
 	visible = false
+	# process can stay; early-out when not visible

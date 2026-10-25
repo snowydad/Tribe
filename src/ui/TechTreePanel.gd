@@ -24,14 +24,11 @@ const FULL_REFRESH_SEC := 1.0
 func _process(delta: float) -> void:
 	if not visible:
 		return
+	# только RP в шапке — полная пересборка кнопок жрёт FPS
 	_refresh_timer += delta
-	_full_refresh_timer += delta
 	if _refresh_timer >= HEADER_REFRESH_SEC:
 		_refresh_timer = 0.0
 		_refresh_header()
-	if _full_refresh_timer >= FULL_REFRESH_SEC:
-		_full_refresh_timer = 0.0
-		_refresh()
 
 
 func _refresh_header() -> void:
