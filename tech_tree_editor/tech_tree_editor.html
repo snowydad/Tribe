@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Tribe - Tech Tree Editor v7</title>
+  <title>Tribe - Tech Tree Editor v8</title>
   <!-- Local Drawflow files with fallback to CDN -->
   <link rel="stylesheet" href="drawflow.min.css" id="df-css">
   <script src="drawflow.min.js" id="df-js"></script>
@@ -60,7 +60,7 @@
       border: 2px solid #4f46e5;
       color: white;
       border-radius: 10px;
-      width: 230px;
+      width: 240px;
       padding: 12px;
       box-shadow: 0 4px 12px rgba(0,0,0,0.4);
     }
@@ -108,8 +108,8 @@
 <body>
 
   <div id="sidebar">
-    <h3>Tribe Tech Editor v7</h3>
-    <p>Visual Tech Tree Editor for Godot 4. Create nodes, configure properties, connect dependencies, and export/import JSON.</p>
+    <h3>Tribe Tech Editor v8</h3>
+    <p>Visual Tech Tree Editor for Godot 4. Create nodes, configure properties (including research_time), connect dependencies, and export/import JSON.</p>
     
     <button onclick="addTechNode()">+ Add Technology</button>
     
@@ -174,7 +174,7 @@
       initDrawflow();
     });
 
-    // Create a node with English UI labels and coordinate tracking
+    // Create a node with English UI labels, research_time parameter, and coordinate tracking
     function addTechNode(defaultData = {}) {
       if (!editor) {
         alert("Drawflow editor is not initialized yet!");
@@ -183,32 +183,37 @@
       nodeCount++;
       const defaultId = defaultData.id || `tech_${nodeCount}`;
       const defaultCat = defaultData.category || "fire";
-      const defaultCost = defaultData.cost || 20;
+      const defaultCost = (defaultData.cost !== undefined) ? defaultData.cost : ((defaultData.research_cost !== undefined) ? defaultData.research_cost : 20);
+      const defaultTime = (defaultData.time !== undefined) ? defaultData.time : ((defaultData.research_time !== undefined) ? defaultData.research_time : 30);
 
-      const posX = (defaultData.posX !== undefined) ? defaultData.posX : (80 + (nodeCount % 4) * 260);
-      const posY = (defaultData.posY !== undefined) ? defaultData.posY : (80 + Math.floor(nodeCount / 4) * 220);
+      const posX = (defaultData.posX !== undefined) ? defaultData.posX : ((defaultData.pos_x !== undefined) ? defaultData.pos_x : (80 + (nodeCount % 4) * 270));
+      const posY = (defaultData.posY !== undefined) ? defaultData.posY : ((defaultData.pos_y !== undefined) ? defaultData.pos_y : (80 + Math.floor(nodeCount / 4) * 230));
 
       const htmlContent = `
         <div class="node-form">
           <label>Tech ID:</label>
           <input type="text" class="node-id" value="${defaultId}" placeholder="campfire">
           
+          <label>Category:</label>
+          <select class="node-cat">
+            <option value="fire" ${defaultCat==='fire'?'selected':''}>Fire</option>
+            <option value="food" ${defaultCat==='food'?'selected':''}>Food</option>
+            <option value="housing" ${defaultCat==='housing'?'selected':''}>Housing</option>
+            <option value="craft" ${defaultCat==='craft'?'selected':''}>Craft</option>
+            <option value="knowledge" ${defaultCat==='knowledge'?'selected':''}>Knowledge</option>
+            <option value="medicine" ${defaultCat==='medicine'?'selected':''}>Medicine</option>
+          </select>
+
           <div class="row">
             <div>
-              <label>Category:</label>
-              <select class="node-cat">
-                <option value="fire" ${defaultCat==='fire'?'selected':''}>Fire</option>
-                <option value="food" ${defaultCat==='food'?'selected':''}>Food</option>
-                <option value="housing" ${defaultCat==='housing'?'selected':''}>Housing</option>
-                <option value="craft" ${defaultCat==='craft'?'selected':''}>Craft</option>
-                <option value="knowledge" ${defaultCat==='knowledge'?'selected':''}>Knowledge</option>
-                <option value="medicine" ${defaultCat==='medicine'?'selected':''}>Medicine</option>
-              </select>
+              <label>Cost (Pts):</label>
+              <input type="number" class="node-cost" value="${defaultCost}" step="5">
+            </div>
+            <div>
+              <label>Time (Sec):</label>
+              <input type="number" class="node-time" value="${defaultTime}" step="5">
             </div>
           </div>
-
-          <label>Research Cost:</label>
-          <input type="number" class="node-cost" value="${defaultCost}" step="5">
 
           <div class="node-coords">📍 X: ${Math.round(posX)} | Y: ${Math.round(posY)}</div>
         </div>
@@ -232,10 +237,12 @@
         const techId = domNode.querySelector('.node-id').value.trim();
         const category = domNode.querySelector('.node-cat').value;
         const cost = parseFloat(domNode.querySelector('.node-cost').value) || 10;
+        const time = parseFloat(domNode.querySelector('.node-time').value) || 30;
 
         resultTechTree[techId] = {
           category: category,
           research_cost: cost,
+          research_time: time,
           pos_x: Math.round(node.pos_x),
           pos_y: Math.round(node.pos_y),
           prerequisites: [],
@@ -303,6 +310,7 @@
               id: techId,
               category: data.category || 'fire',
               cost: data.research_cost || 20,
+              time: data.research_time || 30,
               posX: (data.pos_x !== undefined) ? data.pos_x : (80 + (index % 4) * 270),
               posY: (data.pos_y !== undefined) ? data.pos_y : (80 + Math.floor(index / 4) * 230)
             });
