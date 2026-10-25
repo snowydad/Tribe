@@ -1,45 +1,47 @@
 # ==============================================================================
-# TechTreePanel.gd — простая панель tech (текст + cost), позиции из JSON
-# Toggle кнопкой Research (main).
-# ОБНОВЛЕНО: 2026-10-24
+# TechTreePanel.gd — tech UI: start research (RP+prereq) → timer → known
+# ОБНОВЛЕНО: 2026-10-25 — timed research
 # ==============================================================================
 extends PanelContainer
 
 const MARGIN := 16.0
-const NODE_W := 140.0
+const NODE_W := 180.0
 const NODE_H := 36.0
 
-var _canvas: Control
 var _header: Label
 var _scroll: ScrollContainer
 var _map: Control
-var _labels: Dictionary = {}  # id -> Label
+var _labels: Dictionary = {}
 
 var _refresh_timer: float = 0.0
 var _full_refresh_timer: float = 0.0
+var _was_researching: bool = false
 const HEADER_REFRESH_SEC := 0.25
-const FULL_REFRESH_SEC := 1.0
 
 
-func _process(delta: float) -> void:
+func _process(_delta: float) -> void:
 	if not visible:
+		_was_researching = false
 		return
-	# только RP в шапке — полная пересборка кнопок жрёт FPS
-	_refresh_timer += delta
-	if _refresh_timer >= HEADER_REFRESH_SEC:
-		_refresh_timer = 0.0
-		_refresh_header()
-
-
-func _refresh_header() -> void:
-	if _header == null or TechTree == null:
+	_refresh_timer += _delta
+	if _refresh_timer < HEADER_REFRESH_SEC:
 		return
-	_header.text = "Research  |  RP: %.0f  |  known: %d" % [
-		TechTree.research_points,
-		TechTree.get_known_ids().size()
-	]
-
-
+	_refresh_timer = 0.0
+	_refresh_header()
+	if TechTree == null:
+		return
+	var now_r: bool = TechTree.is_researching()
+	# research закончился при открытой панели → кнопки залипали на ~95%
+	if _was_researching and not now_r:
+		_was_researching = false
+		_refresh()
+		return
+	_was_researching = now_r
+	if now_r:
+		_full_refresh_timer += HEADER_REFRESH_SEC
+		if _full_refresh_timer >= 0.5:
+			_full_refresh_timer = 0.0
+			_refresh()
 
 
 func _ready() -> void:
@@ -51,7 +53,15 @@ func _ready() -> void:
 	offset_right = -40
 	offset_bottom = -40
 	_build()
+	if TechTree and TechTree.research_finished.is_connected(_on_research_finished) == false:
+		TechTree.research_finished.connect(_on_research_finished)
 	_refresh()
+
+
+func _on_research_finished(_id: String) -> void:
+	if visible:
+		_was_researching = false
+		_refresh()
 
 
 func toggle() -> void:
@@ -70,7 +80,6 @@ func close() -> void:
 
 
 func _build() -> void:
-	# style
 	var sb := StyleBoxFlat.new()
 	sb.bg_color = Color(0.08, 0.09, 0.12, 0.94)
 	sb.border_color = Color(0.35, 0.4, 0.55, 1)
@@ -118,16 +127,28 @@ func _build() -> void:
 	_scroll.add_child(_map)
 
 
+func _refresh_header() -> void:
+	if _header == null or TechTree == null:
+		return
+	var extra := ""
+	if TechTree.is_researching():
+		var rid: String = TechTree.get_researching_id()
+		var left: float = TechTree.get_research_remaining()
+		var p01: float = TechTree.get_research_progress01()
+		extra = "  |  %s %.0f%% (%.0fs)" % [rid, p01 * 100.0, left]
+	_header.text = "Research  |  RP: %.0f  |  known: %d%s" % [
+		TechTree.research_points,
+		TechTree.get_known_ids().size(),
+		extra,
+	]
+
+
 func _refresh() -> void:
 	if TechTree == null:
 		if _header:
 			_header.text = "TechTree missing"
 		return
-	_header.text = "Research  |  RP: %.0f  |  known: %d" % [
-		TechTree.research_points,
-		TechTree.get_known_ids().size()
-	]
-	# clear old labels
+	_refresh_header()
 	for c in _map.get_children():
 		c.queue_free()
 	_labels.clear()
@@ -151,63 +172,79 @@ func _refresh() -> void:
 
 	var span_x: float = maxf(max_x - min_x, 1.0)
 	var span_y: float = maxf(max_y - min_y, 1.0)
-	# map size: ~ scale so spacing readable left→right
 	var scale := 0.22
-	var map_w: float = span_x * scale + NODE_W + MARGIN * 2
-	var map_h: float = span_y * scale + NODE_H + MARGIN * 2
-	_map.custom_minimum_size = Vector2(map_w, map_h)
+	_map.custom_minimum_size = Vector2(span_x * scale + NODE_W + MARGIN * 2, span_y * scale + NODE_H + MARGIN * 2)
 
 	for id in ids:
 		var d: Dictionary = TechTree.get_def(id)
 		var x: float = float(d.get("pos_x", 0))
 		var y: float = float(d.get("pos_y", 0))
 		var cost: float = float(d.get("research_cost", 0))
+		var rtime: float = float(d.get("research_time", cost))
 		var known: bool = TechTree.is_known(id)
-		var avail: bool = TechTree.can_research(id)
+		var busy: bool = TechTree.is_researching(id)
+		var prereq_ok: bool = _prereq_ok(id)
 		var afford: bool = TechTree.can_afford(id)
+		var can_start: bool = TechTree.can_start(id)
 
 		var btn := Button.new()
 		btn.custom_minimum_size = Vector2(NODE_W, NODE_H)
-		btn.position = Vector2(
-			MARGIN + (x - min_x) * scale,
-			MARGIN + (y - min_y) * scale
-		)
-		var mark := ""
+		btn.position = Vector2(MARGIN + (x - min_x) * scale, MARGIN + (y - min_y) * scale)
+
 		if known:
-			mark = "✓ "
 			btn.disabled = true
 			btn.modulate = Color(0.55, 0.9, 0.6)
-		elif avail:
-			mark = "○ "
-			btn.disabled = false
-			btn.modulate = Color(1.0, 0.95, 0.55) if afford else Color(0.85, 0.75, 0.4)
+			btn.text = "✓ %s  %d" % [id, int(cost)]
+		elif busy:
+			var p01: float = TechTree.get_research_progress01()
+			btn.disabled = true
+			btn.modulate = Color(0.55, 0.75, 1.0)
+			btn.text = "… %s  %d%%" % [id, int(p01 * 100.0)]
+		elif prereq_ok:
+			btn.disabled = not can_start
+			btn.modulate = Color(1.0, 0.95, 0.55) if can_start else Color(0.85, 0.75, 0.4)
+			btn.text = "○ %s  %dRP/%.0fs" % [id, int(cost), rtime]
 		else:
-			mark = "· "
 			btn.disabled = true
 			btn.modulate = Color(0.55, 0.55, 0.6)
+			btn.text = "· %s  %d" % [id, int(cost)]
 
-		btn.text = "%s%s  %d" % [mark, id, int(cost)]
-		btn.tooltip_text = _tooltip(id, d, known, avail, afford)
+		btn.tooltip_text = _tooltip(id, d, known, prereq_ok, afford, busy, can_start, rtime)
 		var tech_id: String = id
 		btn.pressed.connect(func (): _on_tech_pressed(tech_id))
 		_map.add_child(btn)
 		_labels[id] = btn
 
 
-func _tooltip(id: String, d: Dictionary, known: bool, avail: bool, afford: bool) -> String:
+func _prereq_ok(id: String) -> bool:
+	if TechTree == null or TechTree.is_known(id):
+		return false
+	var d: Dictionary = TechTree.get_def(id)
+	for p in d.get("prerequisites", []):
+		if not TechTree.is_known(str(p)):
+			return false
+	return true
+
+
+func _tooltip(id: String, d: Dictionary, known: bool, prereq_ok: bool, afford: bool, busy: bool, can_start: bool, rtime: float) -> String:
 	var pr: Array = d.get("prerequisites", [])
 	var lines: PackedStringArray = PackedStringArray([
 		id,
 		"category: %s" % str(d.get("category", "")),
 		"cost: %d RP" % int(d.get("research_cost", 0)),
+		"time: %.0f s" % rtime,
 		"prereq: %s" % (", ".join(pr) if pr.size() else "—"),
 	])
 	if known:
 		lines.append("status: known")
-	elif avail and afford:
-		lines.append("status: can research (click)")
-	elif avail:
+	elif busy:
+		lines.append("status: researching…")
+	elif can_start:
+		lines.append("status: click to start")
+	elif prereq_ok and not afford:
 		lines.append("status: need more RP")
+	elif TechTree and TechTree.is_researching():
+		lines.append("status: wait — other research")
 	else:
 		lines.append("status: locked")
 	return "\n".join(lines)
@@ -216,13 +253,11 @@ func _tooltip(id: String, d: Dictionary, known: bool, avail: bool, afford: bool)
 func _on_tech_pressed(id: String) -> void:
 	if TechTree == null:
 		return
-	if TechTree.is_known(id):
+	if TechTree.is_known(id) or TechTree.is_researching():
 		return
-	if not TechTree.can_research(id):
-		return
-	if not TechTree.can_afford(id):
-		print("[TechTreePanel] need RP for ", id, " have=", TechTree.research_points)
+	if not TechTree.can_start(id):
+		print("[TechTreePanel] cannot start ", id, " RP=", TechTree.research_points)
 		_refresh()
 		return
-	TechTree.research(id, true)
+	TechTree.start_research(id)
 	_refresh()
