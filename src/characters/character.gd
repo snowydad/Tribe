@@ -1,6 +1,6 @@
 # ==============================================================================
 # character.gd — FSM, work, drop. HOW-nav → CharacterNavigation.
-# ОБНОВЛЕНО: 2026-10-20 — ThoughtBubble scene (meters)
+# ОБНОВЛЕНО: 2026-10-27 — male_00 glb clips idle/walk/eat/die/work
 # ==============================================================================
 extends CharacterBody3D
 
@@ -345,54 +345,68 @@ func _work_anim_of(site: Node, fallback: String = "work") -> String:
 	return fallback
 
 
+## logical → clip; если work_anim с сайта нет в glb → work → idle
+func _pick_anim(logical: String) -> String:
+	if _anim_player == null:
+		return ""
+	if logical != "" and _anim_player.has_animation(logical):
+		return logical
+	for fb in ["work", "idle"]:
+		if _anim_player.has_animation(fb):
+			return fb
+	return ""
+
+
 func _update_animation() -> void:
 	if not _anim_player or not is_instance_valid(_anim_player):
 		_anim_player = _find_animation_player(self)
 	if not _anim_player or not is_instance_valid(_anim_player):
 		return
 
-	var target_anim: String = "idle"
+	var logical: String = "idle"
 	match current_state:
 		State.DEAD:
-			target_anim = "die"
+			logical = "die"
 		State.IDLE, State.CARRIED:
-			target_anim = "idle"
+			logical = "idle"
 		State.MOVING:
-			target_anim = "walk"
+			logical = "walk"
 		State.EATING:
-			# клип "eat", иначе fallback "work"
-			target_anim = "eat" if _anim_player.has_animation("eat") else "work"
+			logical = "eat"
 		State.GATHERING:
-			target_anim = "work"
+			logical = "work"
 			if target_harvest and is_instance_valid(target_harvest):
 				var wa: String = _work_anim_of(target_harvest, "work")
 				if wa != "":
-					target_anim = wa
+					logical = wa
 		State.CLEARING:
-			target_anim = "work"
+			logical = "work"
+			if target_harvest and is_instance_valid(target_harvest):
+				var ca: String = _work_anim_of(target_harvest, "work")
+				if ca != "":
+					logical = ca
 		State.DELIVERING:
 			if _is_unloading_at_storage:
-				target_anim = "work"
+				logical = "work"
 				if target_storage and is_instance_valid(target_storage):
 					var da: String = _work_anim_of(target_storage, "work")
 					if da != "":
-						target_anim = da
+						logical = da
 			else:
-				target_anim = "walk"
+				logical = "walk"
 
-	if not _anim_player.has_animation(target_anim):
-		if target_anim != "work" and _anim_player.has_animation("work"):
-			target_anim = "work"
-		else:
-			return
-	# die — один раз, не рестартить каждый кадр
-	if target_anim == "die":
+	var target_anim: String = _pick_anim(logical)
+	if target_anim == "":
+		return
+
+	# die — один раз
+	if logical == "die":
 		if _death_anim_played:
 			return
-		var anim := _anim_player.get_animation("die")
+		var anim := _anim_player.get_animation(target_anim)
 		if anim:
 			anim.loop_mode = Animation.LOOP_NONE
-		_anim_player.play("die")
+		_anim_player.play(target_anim)
 		_death_anim_played = true
 		return
 
@@ -430,10 +444,18 @@ func _die() -> void:
 func _find_animation_player(node: Node) -> AnimationPlayer:
 	if not node:
 		return null
+	# glTF skeleton clips: male_00/AnimationPlayer
+	var male := node.get_node_or_null("male_00") as Node
+	if male:
+		var ap_m = male.get_node_or_null("AnimationPlayer") as AnimationPlayer
+		if ap_m:
+			return ap_m
 	var ap = node.get_node_or_null("AnimationPlayer") as AnimationPlayer
 	if ap:
 		return ap
 	for child in node.get_children():
+		if str(child.name).begins_with("_AnimationPlayer"):
+			continue
 		var found = _find_animation_player(child)
 		if found:
 			return found
