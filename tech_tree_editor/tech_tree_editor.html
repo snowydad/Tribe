@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Tribe - Tech Tree Editor v8</title>
+  <title>Tribe - Tech Tree Editor v10</title>
   <!-- Local Drawflow files with fallback to CDN -->
   <link rel="stylesheet" href="drawflow.min.css" id="df-css">
   <script src="drawflow.min.js" id="df-js"></script>
@@ -51,6 +51,8 @@
     button:hover { background: #6366f1; }
     button.export-btn { background: #10b981; }
     button.export-btn:hover { background: #059669; }
+    button.save-as-btn { background: #059669; opacity: 0.8; font-size: 11px; padding: 6px 10px; }
+    button.save-as-btn:hover { opacity: 1; }
     button.import-btn { background: #0284c7; }
     button.import-btn:hover { background: #0369a1; }
 
@@ -103,13 +105,22 @@
       font-family: monospace;
       text-align: right;
     }
+
+    .file-status {
+      font-size: 11px;
+      color: #34d399;
+      background: #162e24;
+      padding: 6px;
+      border-radius: 4px;
+      word-break: break-all;
+    }
   </style>
 </head>
 <body>
 
   <div id="sidebar">
-    <h3>Tribe Tech Editor v8</h3>
-    <p>Visual Tech Tree Editor for Godot 4. Create nodes, configure properties (including research_time), connect dependencies, and export/import JSON.</p>
+    <h3>Tribe Tech Editor v10</h3>
+    <p>Visual Tech Tree Editor with Direct Native File Saving (File System Access API). Overwrite directly into your Godot project folder!</p>
     
     <button onclick="addTechNode()">+ Add Technology</button>
     
@@ -119,6 +130,9 @@
     <input type="file" id="file-input" accept=".json" style="display:none;" onchange="importJSON(event)">
     
     <button class="export-btn" onclick="exportToGodotJSON()">💾 Save tech_tree.json</button>
+    <button class="save-as-btn" onclick="saveFileAs()">💾 Save As New Location...</button>
+    
+    <div id="file-status-box" class="file-status" style="display:none;"></div>
   </div>
 
   <div id="drawflow"></div>
@@ -126,6 +140,7 @@
   <script>
     let editor = null;
     let nodeCount = 0;
+    let fileHandle = null;
 
     // Auto-load CDN fallback if local files are missing
     function initDrawflow() {
@@ -223,9 +238,7 @@
       editor.addNode(defaultId, 3, 3, posX, posY, defaultId, {}, htmlContent);
     }
 
-    // Export graph to tech_tree.json format for Godot 4
-    function exportToGodotJSON() {
-      if (!editor) return;
+    function buildJSONString() {
       const exportData = editor.export().drawflow.Home.data;
       const resultTechTree = {};
 
@@ -236,8 +249,14 @@
 
         const techId = domNode.querySelector('.node-id').value.trim();
         const category = domNode.querySelector('.node-cat').value;
-        const cost = parseFloat(domNode.querySelector('.node-cost').value) || 10;
-        const time = parseFloat(domNode.querySelector('.node-time').value) || 30;
+        
+        const rawCost = domNode.querySelector('.node-cost').value;
+        const parsedCost = parseFloat(rawCost);
+        const cost = !isNaN(parsedCost) ? parsedCost : 0;
+
+        const rawTime = domNode.querySelector('.node-time').value;
+        const parsedTime = parseFloat(rawTime);
+        const time = !isNaN(parsedTime) ? parsedTime : 0;
 
         resultTechTree[techId] = {
           category: category,
@@ -283,12 +302,56 @@
         delete resultTechTree[id]._drawflow_id;
       });
 
-      const jsonStr = JSON.stringify(resultTechTree, null, 2);
+      return JSON.stringify(resultTechTree, null, 2);
+    }
+
+    // Direct save with File System Access API (or download fallback)
+    async function exportToGodotJSON() {
+      if (!editor) return;
+      const jsonStr = buildJSONString();
+
+      // Check for modern File System Access API support (Chrome, Edge, Opera, Brave)
+      if ('showSaveFilePicker' in window) {
+        try {
+          if (!fileHandle) {
+            fileHandle = await window.showSaveFilePicker({
+              suggestedName: 'tech_tree.json',
+              types: [{
+                description: 'JSON Configuration File',
+                accept: { 'application/json': ['.json'] },
+              }],
+            });
+          }
+
+          const writable = await fileHandle.createWritable();
+          await writable.write(jsonStr);
+          await writable.close();
+
+          showFileStatus(`Saved directly to: ${fileHandle.name}`);
+          return;
+        } catch (err) {
+          if (err.name === 'AbortError') return; // User canceled dialog
+          console.warn("FileSystem API error or restriction, falling back to download:", err);
+        }
+      }
+
+      // Fallback for browsers without File System Access API
       const blob = new Blob([jsonStr], { type: "application/json" });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
       a.download = "tech_tree.json";
       a.click();
+    }
+
+    async function saveFileAs() {
+      fileHandle = null; // Reset handle to force window.showSaveFilePicker dialog
+      await exportToGodotJSON();
+    }
+
+    function showFileStatus(msg) {
+      const box = document.getElementById('file-status-box');
+      box.textContent = msg;
+      box.style.display = 'block';
     }
 
     // Import existing tech_tree.json file
@@ -309,8 +372,8 @@
             addTechNode({
               id: techId,
               category: data.category || 'fire',
-              cost: data.research_cost || 20,
-              time: data.research_time || 30,
+              cost: (data.research_cost !== undefined) ? data.research_cost : 20,
+              time: (data.research_time !== undefined) ? data.research_time : 30,
               posX: (data.pos_x !== undefined) ? data.pos_x : (80 + (index % 4) * 270),
               posY: (data.pos_y !== undefined) ? data.pos_y : (80 + Math.floor(index / 4) * 230)
             });
