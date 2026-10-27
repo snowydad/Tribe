@@ -100,18 +100,23 @@ mesh = SubResource("SphereMesh_csncc")
 
 [node name="Character" parent="." unique_id=682575563 instance=ExtResource("2_ab7mr")]
 transform = Transform3D(-0.97678876, 0, -0.21420497, 0, 1, 0, 0.21420497, 0, -0.97678876, 0, 2.620082, 9.29436)
+visible = false
 
 [node name="Character2" parent="." unique_id=1713816478 instance=ExtResource("2_ab7mr")]
 transform = Transform3D(0.9987056, 0, -0.05086355, 0, 1, 0, 0.05086355, 0, 0.9987056, 6.6310062, 2.620082, 9.29436)
+visible = false
 
 [node name="Character3" parent="." unique_id=1157721677 instance=ExtResource("2_ab7mr")]
 transform = Transform3D(0.9987056, 0, -0.05086355, 0, 1, 0, 0.05086355, 0, 0.9987056, 9.491768, 2.620082, 9.29436)
+visible = false
 
 [node name="Character4" parent="." unique_id=1439994891 instance=ExtResource("2_ab7mr")]
 transform = Transform3D(0.9987056, 0, -0.05086355, 0, 1, 0, 0.05086355, 0, 0.9987056, 9.491768, 2.620082, 22.519714)
+visible = false
 
 [node name="Character5" parent="." unique_id=311025156 instance=ExtResource("2_ab7mr")]
 transform = Transform3D(-0.97784, 0, -0.20935372, 0, 1, 0, 0.20935372, 0, -0.97784, -2.7363024, 2.620082, 22.519714)
+visible = false
 
 [node name="Character6" parent="." unique_id=232762373 instance=ExtResource("2_ab7mr")]
 transform = Transform3D(0.9987056, 0, -0.05086355, 0, 1, 0, 0.05086355, 0, 0.9987056, -8.3752165, 2.620082, 22.519714)
