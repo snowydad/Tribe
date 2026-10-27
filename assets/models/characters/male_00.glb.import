@@ -41,7 +41,7 @@ materials/extract_format=0
 materials/extract_path=""
 _subresources={
 "animations": {
-"Eat": {
+"eat": {
 "save_to_file/enabled": false,
 "save_to_file/fallback_path": "",
 "save_to_file/keep_custom_tracks": "",
@@ -2097,7 +2097,7 @@ _subresources={
 "slice_99/start_frame": 0,
 "slices/amount": 0
 },
-"Idle": {
+"idle": {
 "save_to_file/enabled": false,
 "save_to_file/fallback_path": "",
 "save_to_file/keep_custom_tracks": "",
@@ -4153,7 +4153,7 @@ _subresources={
 "slice_99/start_frame": 0,
 "slices/amount": 0
 },
-"Walk": {
+"walk": {
 "save_to_file/enabled": false,
 "save_to_file/fallback_path": "",
 "save_to_file/keep_custom_tracks": "",
@@ -6209,7 +6209,7 @@ _subresources={
 "slice_99/start_frame": 0,
 "slices/amount": 0
 },
-"Work_": {
+"work": {
 "save_to_file/enabled": false,
 "save_to_file/fallback_path": "",
 "save_to_file/keep_custom_tracks": "",
