@@ -222,8 +222,7 @@ func get_work_skill() -> String:
 
 
 func get_work_type() -> String:
-	if under_construction:
-		return "building"
+	# fueling → deposit → start_stoking (не "building" → BUILD not implemented)
 	return work_type
 
 

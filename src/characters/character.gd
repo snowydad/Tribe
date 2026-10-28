@@ -1370,8 +1370,11 @@ func start_work_at(site: Node3D) -> void:
 		"clear":
 			start_clearing_obstacle(site)
 		"build":
-			print("[Character] BUILD not implemented yet for %s" % site.name)
-			_go_to_site_wp(site)
+			if site.is_in_group("campfire") or site.has_method("needs_fuel"):
+				start_stoking(site)
+			else:
+				print("[Character] BUILD not implemented yet for %s" % site.name)
+				_go_to_site_wp(site)
 		_:
 			_go_to_site_wp(site)
 

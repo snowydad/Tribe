@@ -1,6 +1,6 @@
 # ==============================================================================
 # CharacterDecision.gd — решения (eat / deliver / harvest / drop). Движение — host.
-# ОБНОВЛЕНО: 2026-10-20 — talent→work, no talent→wander
+# ОБНОВЛЕНО: 2026-10-28 — drop campfire → stoking (build+fuel)
 # ==============================================================================
 extends RefCounted
 
@@ -465,12 +465,13 @@ func resolve_after_drop(drop_site: Node3D = null) -> void:
 
 	# 0) cargo → deliver
 	if hands_busy():
-		if drop_site and is_instance_valid(drop_site) and WorkSite.get_category(drop_site) == "deposit":
+		if drop_site and is_instance_valid(drop_site):
 			if drop_site.is_in_group("campfire") or drop_site.has_method("needs_fuel"):
 				host.start_stoking(drop_site)
-			else:
+				return
+			if WorkSite.get_category(drop_site) == "deposit":
 				host.start_delivering_to_storage(drop_site)
-			return
+				return
 		if tm and tm.has_tasks():
 			var cur = tm.get_current_task()
 			if cur and cur.type == TaskManager.TaskType.DELIVER and cur.target_node and is_instance_valid(cur.target_node):
@@ -512,10 +513,14 @@ func resolve_after_drop(drop_site: Node3D = null) -> void:
 	# 2) drop/click on object: всегда remember → talent? work : wander (потом work из idle)
 	if drop_site and is_instance_valid(drop_site):
 		remember_site(drop_site)
+		# campfire fuel/construction — любой талант
+		if drop_site.is_in_group("campfire") or drop_site.has_method("needs_fuel"):
+			host.start_stoking(drop_site)
+			drop_eat_if_hungry()
+			return
 		if has_talent_for_site(drop_site):
 			host.start_work_at(drop_site)
 		else:
-			# без таланта: погулял → process_idle/knows_harvest → work
 			host.wander_nearby()
 		drop_eat_if_hungry()
 		return
