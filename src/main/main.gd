@@ -26,9 +26,13 @@ func _ready() -> void:
 	_setup_build_placement()
 
 
-func _on_selection_changed(character) -> void:
-	if char_panel and char_panel.has_method("set_character"):
-		char_panel.set_character(character)
+func _on_selection_changed(node) -> void:
+	if char_panel == null:
+		return
+	if char_panel.has_method("set_selection"):
+		char_panel.set_selection(node)
+	elif char_panel.has_method("set_character"):
+		char_panel.set_character(node)
 
 
 func _setup_research_ui() -> void:

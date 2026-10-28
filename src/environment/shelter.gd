@@ -233,6 +233,15 @@ func _cleanup_dict(slots: Dictionary) -> void:
 		slots.erase(rid)
 
 
+func get_info_text() -> String:
+	if has_method("_update_dev_ui"):
+		_update_dev_ui()
+	var dl = get_node_or_null("DevLabel") as Label3D
+	if dl != null and str(dl.text).strip_edges() != "":
+		return str(dl.text)
+	return name
+
+
 func _update_dev_ui() -> void:
 	if dev_label == null:
 		return

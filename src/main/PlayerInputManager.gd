@@ -1,12 +1,13 @@
 # ==============================================================================
 # PlayerInputManager.gd — ввод: тык = select/инфо, hold/сдвиг = drag
-# ОБНОВЛЕНО: 2026-10-20 — pan release ≠ move order
+# ОБНОВЛЕНО: 2026-10-28 — select character OR worksite + object ring
 # ==============================================================================
 extends Node3D
 
-signal selection_changed(character)
+signal selection_changed(node)  # Character or worksite or null
 
 @export var camera: Camera3D
+@export var object_ring_scale: float = 1.6
 ## сдвиг мыши (px) → начало drag
 @export var drag_threshold: float = 10.0
 ## удержание (сек) → начало drag
@@ -15,7 +16,9 @@ signal selection_changed(character)
 @export var lift_speed: float = 12.0
 
 var selected_character: CharacterBody3D = null
+var selected_object: Node3D = null
 var is_dragging_character: bool = false
+var _object_ring: MeshInstance3D = null
 
 var _click_start_pos: Vector2 = Vector2.ZERO
 var _is_pressing: bool = false
@@ -24,7 +27,12 @@ var _press_on_character: CharacterBody3D = null
 var _press_time: float = 0.0
 
 
+func _ready() -> void:
+	_ensure_object_ring()
+
+
 func _process(delta: float) -> void:
+	_update_object_ring()
 	if is_dragging_character and selected_character:
 		_update_drag_position(delta)
 		return
@@ -117,13 +125,75 @@ func _begin_drag(ch: CharacterBody3D) -> void:
 
 
 func _select_character(hit_char: CharacterBody3D) -> void:
+	_clear_object_selection(false)
 	if selected_character and selected_character != hit_char and is_instance_valid(selected_character):
 		if selected_character.has_method("set_selected"):
 			selected_character.set_selected(false)
 	selected_character = hit_char
-	if selected_character.has_method("set_selected"):
+	if selected_character and selected_character.has_method("set_selected"):
 		selected_character.set_selected(true)
 	selection_changed.emit(selected_character)
+
+
+func _select_object(site: Node3D) -> void:
+	if selected_character and is_instance_valid(selected_character):
+		if selected_character.has_method("set_selected"):
+			selected_character.set_selected(false)
+		selected_character = null
+	selected_object = site
+	_ensure_object_ring()
+	if _object_ring:
+		_object_ring.visible = site != null
+	selection_changed.emit(site)
+
+
+func _clear_object_selection(emit_if_only_object: bool = true) -> void:
+	if selected_object == null:
+		return
+	selected_object = null
+	if _object_ring:
+		_object_ring.visible = false
+	if emit_if_only_object and selected_character == null:
+		selection_changed.emit(null)
+
+
+func _clear_all_selection() -> void:
+	if selected_character and is_instance_valid(selected_character):
+		if selected_character.has_method("set_selected"):
+			selected_character.set_selected(false)
+	selected_character = null
+	_clear_object_selection(false)
+	selection_changed.emit(null)
+
+
+func _ensure_object_ring() -> void:
+	if _object_ring and is_instance_valid(_object_ring):
+		return
+	_object_ring = MeshInstance3D.new()
+	_object_ring.name = "ObjectSelectionRing"
+	var torus := TorusMesh.new()
+	torus.inner_radius = 0.8 * object_ring_scale
+	torus.outer_radius = 1.0 * object_ring_scale
+	_object_ring.mesh = torus
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.albedo_color = Color(0.35, 0.95, 0.4, 0.85)
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_object_ring.material_override = mat
+	_object_ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_object_ring.visible = false
+	add_child(_object_ring)
+
+
+func _update_object_ring() -> void:
+	if _object_ring == null or not _object_ring.visible:
+		return
+	if selected_object == null or not is_instance_valid(selected_object):
+		_object_ring.visible = false
+		selected_object = null
+		return
+	var p: Vector3 = selected_object.global_position
+	_object_ring.global_position = Vector3(p.x, p.y + 0.05, p.z)
 
 
 ## Поиск персонажа под курсором
@@ -224,36 +294,34 @@ func _handle_click(mouse_position: Vector2) -> void:
 			return
 
 	var hit_char = _get_character_under_mouse(mouse_position)
-
 	if hit_char:
-		# уже select на down — дублируем безопасно (инфо/панель)
 		_select_character(hit_char)
 		return
 
 	var ray_origin = camera.project_ray_origin(mouse_position)
 	var ray_end = ray_origin + camera.project_ray_normal(mouse_position) * 1000.0
-
 	var space_state = get_world_3d().direct_space_state
 	var query = PhysicsRayQueryParameters3D.create(ray_origin, ray_end)
 	if selected_character:
 		query.exclude = [selected_character.get_rid()]
 	query.collide_with_bodies = true
 	query.collide_with_areas = true
-
 	var result = space_state.intersect_ray(query)
 
 	if result:
 		var target_node = _find_interactable_node(result.collider)
-		if target_node and selected_character:
-			_assign_task_by_target(selected_character, target_node)
+		if target_node:
+			var ch: CharacterBody3D = selected_character
+			if ch and is_instance_valid(ch):
+				_assign_task_by_target(ch, target_node)
+			_select_object(target_node as Node3D)
 		elif selected_character:
 			selected_character.move_to_position(result.position)
+			_clear_object_selection(true)
+		else:
+			_clear_all_selection()
 	else:
-		if selected_character:
-			if selected_character.has_method("set_selected"):
-				selected_character.set_selected(false)
-			selected_character = null
-			selection_changed.emit(null)
+		_clear_all_selection()
 
 
 func _update_drag_position(delta: float) -> void:

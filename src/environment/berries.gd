@@ -440,13 +440,22 @@ func _find_next_free_slot_index() -> int:
 	return candidate
 
 
+func get_info_text() -> String:
+	if has_method("_update_dev_ui"):
+		_update_dev_ui()
+	var dl = get_node_or_null("DevLabel") as Label3D
+	if dl != null and str(dl.text).strip_edges() != "":
+		return str(dl.text)
+	return name
+
+
 func _update_dev_ui() -> void:
 	if not dev_label:
 		return
-	if DevCheatManager and DevCheatManager.has_method("is_dev_overlays_on") and not DevCheatManager.is_dev_overlays_on():
-		dev_label.visible = false
-		return
-	dev_label.visible = true
+	var show_dev := true
+	if DevCheatManager and DevCheatManager.has_method("is_dev_overlays_on"):
+		show_dev = DevCheatManager.is_dev_overlays_on()
+	dev_label.visible = show_dev
 	var life := "∞" if life_cycles_max <= 0 else "%d/%d" % [life_cycles_count, life_cycles_max]
 	if is_dead:
 		dev_label.text = "Berries: DEAD\nCycles: %s\nWork: %s" % [life, work_type]

@@ -326,11 +326,20 @@ func _cleanup_slots() -> void:
 		_occupied_slots.erase(req_id)
 
 
+func get_info_text() -> String:
+	if has_method("_update_dev_ui"):
+		_update_dev_ui()
+	var dl = get_node_or_null("DevLabel") as Label3D
+	if dl != null and str(dl.text).strip_edges() != "":
+		return str(dl.text)
+	return "Storage"
+
+
 func _update_dev_ui() -> void:
 	if not dev_label:
 		return
-	if DevCheatManager and DevCheatManager.has_method("is_dev_overlays_on") and not DevCheatManager.is_dev_overlays_on():
-		dev_label.visible = false
-		return
-	dev_label.visible = true
+	var show_dev := true
+	if DevCheatManager and DevCheatManager.has_method("is_dev_overlays_on"):
+		show_dev = DevCheatManager.is_dev_overlays_on()
+	dev_label.visible = show_dev
 	dev_label.text = "Food:%d/%d Wood:%d\n%s" % [stored_food, max_storage, stored_wood, active_work_id]

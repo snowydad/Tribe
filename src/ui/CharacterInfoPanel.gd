@@ -1,6 +1,6 @@
 # ==============================================================================
 # CharacterInfoPanel.gd — HUD: FPS + время + инфо выбранного перса
-# ОБНОВЛЕНО: 2026-10-13 — label top-left, fill panel (no vertical jump)
+# ОБНОВЛЕНО: 2026-10-28 — character OR worksite in selection block
 # res://src/ui/CharacterInfoPanel.gd
 # ==============================================================================
 extends PanelContainer
@@ -21,8 +21,12 @@ func _ready() -> void:
 	get_viewport().size_changed.connect(_apply_top_right_layout)
 
 func set_character(character: Node) -> void:
-	if character != null and is_instance_valid(character):
-		_selected = character
+	set_selection(character)
+
+
+func set_selection(node: Node) -> void:
+	if node != null and is_instance_valid(node):
+		_selected = node
 	else:
 		_selected = null
 	_apply_top_right_layout()
@@ -96,9 +100,9 @@ func _update_text() -> void:
 			year_month = str(TimeManager.current_year)
 		time_str = _format_game_duration()
 	var text := "FPS:%d\n%s / %s" % [fps, year_month, time_str]
-	var char_block := _format_character_block()
-	if char_block != "":
-		text += "\n" + char_block
+	var info_block := _format_selection_block()
+	if info_block != "":
+		text += "\n" + info_block
 	_label.text = text
 	if fps < 30:
 		_label.modulate = Color(1.0, 0.35, 0.35)
@@ -106,6 +110,29 @@ func _update_text() -> void:
 		_label.modulate = Color(1.0, 0.85, 0.3)
 	else:
 		_label.modulate = Color(0.7, 1.0, 0.7)
+
+func _format_selection_block() -> String:
+	if _selected == null or not is_instance_valid(_selected):
+		return ""
+	# character has CharacterData on .data
+	if _selected.get("data") != null:
+		return _format_character_block()
+	return _format_object_block(_selected)
+
+
+func _format_object_block(n: Node) -> String:
+	var title := str(n.name)
+	var body := ""
+	if n.has_method("get_info_text"):
+		body = str(n.call("get_info_text"))
+	else:
+		var dl = n.get_node_or_null("DevLabel") as Label3D
+		if dl != null:
+			body = str(dl.text)
+	if body.strip_edges() == "":
+		body = "(no info)"
+	return "[%s]\n%s" % [title, body]
+
 
 func _format_character_block() -> String:
 	if _selected == null or not is_instance_valid(_selected):

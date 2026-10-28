@@ -321,13 +321,20 @@ func release_work_point(requester: Node3D) -> void:
 		_occupied_slots.erase(requester.get_instance_id())
 
 
+func get_info_text() -> String:
+	if under_construction:
+		var pct := 0 if build_time <= 0.0 else int(100.0 * build_progress / build_time)
+		return "BUILDING\n%d%%\nmat %d/%d" % [pct, _build_wood_used, build_wood_needed]
+	return "Fire:%s\nWood:%d/%d\nFuel:%.0fs" % [fire_state, wood_stock, max_wood, fuel_time]
+
+
 func _update_dev_ui() -> void:
 	if not dev_label:
 		return
-	if DevCheatManager and DevCheatManager.has_method("is_dev_overlays_on") and not DevCheatManager.is_dev_overlays_on():
-		dev_label.visible = false
-		return
-	dev_label.visible = true
+	var show_dev := true
+	if DevCheatManager and DevCheatManager.has_method("is_dev_overlays_on"):
+		show_dev = DevCheatManager.is_dev_overlays_on()
+	dev_label.visible = show_dev
 	if under_construction:
 		var pct := 0 if build_time <= 0.0 else int(100.0 * build_progress / build_time)
 		dev_label.text = "BUILDING\n%d%%\nmat %d/%d" % [pct, _build_wood_used, build_wood_needed]
