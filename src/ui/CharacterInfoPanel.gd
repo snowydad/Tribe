@@ -1,6 +1,6 @@
 # ==============================================================================
-# CharacterInfoPanel.gd — HUD: FPS + время + инфо выбранного перса
-# ОБНОВЛЕНО: 2026-10-28 — character OR worksite in selection block
+# CharacterInfoPanel.gd — selection only (char/object)
+# ОБНОВЛЕНО: 2026-10-28 — FPS/resources → ResourcesPanel
 # res://src/ui/CharacterInfoPanel.gd
 # ==============================================================================
 extends PanelContainer
@@ -55,6 +55,7 @@ func _apply_top_right_layout() -> void:
 	offset_top = margin.y
 	offset_right = -margin.x
 	offset_bottom = margin.y + panel_size.y
+	visible = _selected != null
 	if _label:
 		_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 		_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -90,27 +91,14 @@ func _build_label() -> void:
 func _update_text() -> void:
 	if _label == null:
 		return
-	var fps := Engine.get_frames_per_second()
-	var year_month := "1.1"
-	var time_str := "0d0h0m"
-	if TimeManager:
-		if TimeManager.has_method("get_display_year_month"):
-			year_month = TimeManager.get_display_year_month()
-		else:
-			year_month = str(TimeManager.current_year)
-		time_str = _format_game_duration()
-	var text := "FPS:%d\n%s / %s" % [fps, year_month, time_str]
 	var info_block := _format_selection_block()
-	if info_block != "":
-		text += "\n" + info_block
-	_label.text = text
-	if fps < 30:
-		_label.modulate = Color(1.0, 0.35, 0.35)
-	elif fps < 50:
-		_label.modulate = Color(1.0, 0.85, 0.3)
-	else:
-		_label.modulate = Color(0.7, 1.0, 0.7)
-
+	if info_block == "":
+		_label.text = ""
+		visible = false
+		return
+	visible = true
+	_label.text = info_block
+	_label.modulate = Color(0.7, 1.0, 0.7)
 func _format_selection_block() -> String:
 	if _selected == null or not is_instance_valid(_selected):
 		return ""

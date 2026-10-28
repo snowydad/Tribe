@@ -5,6 +5,7 @@
 extends Node3D
 
 const TechTreePanelScript = preload("res://src/ui/TechTreePanel.gd")
+const ResourcesPanelScript = preload("res://src/ui/ResourcesPanel.gd")
 const BuildPlacementScript = preload("res://src/main/BuildPlacement.gd")
 const CampfireScene = preload("res://src/environment/campfire.tscn")
 
@@ -12,6 +13,7 @@ const CampfireScene = preload("res://src/environment/campfire.tscn")
 @onready var camera_anchor: Node3D = $CameraAnchor
 @onready var ui_layer: CanvasLayer = $UI
 @onready var char_panel: PanelContainer = $UI/CharacterInfoPanel
+var _resources_panel: PanelContainer
 
 var _tech_panel: PanelContainer
 var _research_btn: Button
@@ -22,8 +24,22 @@ func _ready() -> void:
 	print("[Main] World scene ready.")
 	if player_input and player_input.has_signal("selection_changed"):
 		player_input.selection_changed.connect(_on_selection_changed)
+	_setup_resources_panel()
 	_setup_research_ui()
 	_setup_build_placement()
+
+
+func _setup_resources_panel() -> void:
+	if ui_layer == null:
+		return
+	var existing = ui_layer.get_node_or_null("ResourcesPanel")
+	if existing:
+		_resources_panel = existing as PanelContainer
+		return
+	_resources_panel = PanelContainer.new()
+	_resources_panel.name = "ResourcesPanel"
+	_resources_panel.set_script(ResourcesPanelScript)
+	ui_layer.add_child(_resources_panel)
 
 
 func _on_selection_changed(node) -> void:
