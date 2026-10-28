@@ -328,4 +328,8 @@ func _update_dev_ui() -> void:
 		dev_label.visible = false
 		return
 	dev_label.visible = true
-	dev_label.text = "Fire:%s\nWood:%d/%d\nFuel:%.0fs" % [fire_state, wood_stock, max_wood, fuel_time]
+	if under_construction:
+		var pct := 0 if build_time <= 0.0 else int(100.0 * build_progress / build_time)
+		dev_label.text = "BUILDING\n%d%%\nmat %d/%d" % [pct, _build_wood_used, build_wood_needed]
+	else:
+		dev_label.text = "Fire:%s\nWood:%d/%d\nFuel:%.0fs" % [fire_state, wood_stock, max_wood, fuel_time]
