@@ -1,8 +1,14 @@
 # ==============================================================================
 # TechTreePanel.gd — tech UI: start research (RP+prereq) → timer → known
-# ОБНОВЛЕНО: 2026-10-25 — timed research
+# ОБНОВЛЕНО: 2026-10-28 — Build button for placeable known tech (step1)
 # ==============================================================================
 extends PanelContainer
+
+## tech_id (e.g. "campfire") — placement later
+signal build_requested(tech_id: String)
+
+## known + can place in world
+const BUILDABLE_TECHS: PackedStringArray = ["campfire"]
 
 const MARGIN := 16.0
 const NODE_W := 180.0
@@ -192,9 +198,16 @@ func _refresh() -> void:
 		btn.position = Vector2(MARGIN + (x - min_x) * scale, MARGIN + (y - min_y) * scale)
 
 		if known:
-			btn.disabled = true
-			btn.modulate = Color(0.55, 0.9, 0.6)
-			btn.text = "✓ %s  %d" % [id, int(cost)]
+			var can_build: bool = str(id) in BUILDABLE_TECHS
+			if can_build:
+				btn.disabled = false
+				btn.modulate = Color(0.45, 0.85, 1.0)
+				btn.text = "Build  %s" % id
+				btn.tooltip_text = "Place %s in the world" % id
+			else:
+				btn.disabled = true
+				btn.modulate = Color(0.55, 0.9, 0.6)
+				btn.text = "✓ %s  %d" % [id, int(cost)]
 		elif busy:
 			var p01: float = TechTree.get_research_progress01()
 			btn.disabled = true
@@ -209,7 +222,8 @@ func _refresh() -> void:
 			btn.modulate = Color(0.55, 0.55, 0.6)
 			btn.text = "· %s  %d" % [id, int(cost)]
 
-		btn.tooltip_text = _tooltip(id, d, known, prereq_ok, afford, busy, can_start, rtime)
+		if not (known and str(id) in BUILDABLE_TECHS):
+			btn.tooltip_text = _tooltip(id, d, known, prereq_ok, afford, busy, can_start, rtime)
 		var tech_id: String = id
 		btn.pressed.connect(func (): _on_tech_pressed(tech_id))
 		_map.add_child(btn)
@@ -252,6 +266,11 @@ func _tooltip(id: String, d: Dictionary, known: bool, prereq_ok: bool, afford: b
 
 func _on_tech_pressed(id: String) -> void:
 	if TechTree == null:
+		return
+	# step1: known + buildable → signal only (placement later)
+	if TechTree.is_known(id) and str(id) in BUILDABLE_TECHS:
+		print("[TechTreePanel] Build requested: ", id)
+		build_requested.emit(id)
 		return
 	if TechTree.is_known(id) or TechTree.is_researching():
 		return

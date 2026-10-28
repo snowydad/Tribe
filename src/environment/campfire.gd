@@ -1,6 +1,6 @@
 # ==============================================================================
 # campfire.gd — костёр WorkSite: fuel (wood), lit/embers. v1 без happy.
-# ОБНОВЛЕНО: 2026-10-17 — get_rest_radius (night rest)
+# ОБНОВЛЕНО: 2026-10-28 — construction + wood via stoking path
 # ==============================================================================
 extends Node3D
 class_name CampfireSite
@@ -18,6 +18,13 @@ var fuel_time: float = 0.0
 ## lit | embers
 var fire_state: String = "embers"
 
+## player-placed build
+var under_construction: bool = false
+var build_progress: float = 0.0
+var build_time: float = 30.0
+var build_wood_needed: int = 5
+var _build_wood_used: int = 0
+
 var _occupied_slots: Dictionary = {}
 
 @onready var dev_label: Label3D = get_node_or_null("DevLabel") as Label3D
@@ -29,8 +36,61 @@ func _ready() -> void:
 	add_to_group("interactable")
 	add_to_group(WorkSite.GROUP)
 	_load_from_config()
+	if under_construction:
+		_begin_construction()
 	_sync_light()
 	_update_dev_ui()
+
+
+## call before add_child, or set under_construction=true before enter tree
+func setup_as_construction() -> void:
+	under_construction = true
+	build_progress = 0.0
+
+
+func _begin_construction() -> void:
+	wood_stock = 0
+	fuel_time = 0.0
+	fire_state = "embers"
+	build_progress = 0.0
+	_build_wood_used = 0
+	if ConfigLoader and ConfigLoader.has_method("get_campfire_value"):
+		build_time = float(ConfigLoader.get_campfire_value("build", "build_time", build_time))
+		build_wood_needed = int(ConfigLoader.get_campfire_value("build", "build_wood_needed", build_wood_needed))
+	elif ConfigLoader and ConfigLoader.has_method("get_config_value"):
+		build_time = float(ConfigLoader.get_config_value("campfire", "build", "build_time", build_time))
+		build_wood_needed = int(ConfigLoader.get_config_value("campfire", "build", "build_wood_needed", build_wood_needed))
+	build_wood_needed = maxi(build_wood_needed, 1)
+	_sync_light()
+	print("[Campfire] under construction time=%.1f wood_need=%d" % [build_time, build_wood_needed])
+
+
+func is_built() -> bool:
+	return not under_construction
+
+
+## work-sec from character (wood delivery later)
+func contribute_build(amount: float) -> float:
+	if not under_construction or amount <= 0.0:
+		return 0.0
+	var before := build_progress
+	build_progress = minf(build_progress + amount, build_time)
+	_update_dev_ui()
+	if build_progress >= build_time:
+		_finish_construction()
+	return build_progress - before
+
+
+func _finish_construction() -> void:
+	under_construction = false
+	build_progress = build_time
+	# empty fuel until stoked
+	wood_stock = 0
+	fuel_time = 0.0
+	fire_state = "embers"
+	_sync_light()
+	_update_dev_ui()
+	print("[Campfire] construction complete")
 
 
 func _load_from_config() -> void:
@@ -66,6 +126,8 @@ func _apply_start_fuel(start_w: int) -> void:
 
 
 func _process(delta: float) -> void:
+	if under_construction:
+		return
 	if fuel_time > 0.0:
 		fuel_time = maxf(fuel_time - delta, 0.0)
 		# wood_stock ≈ ceil(fuel / per_wood) для UI
@@ -105,6 +167,9 @@ func get_rest_radius() -> float:
 
 
 func needs_fuel() -> bool:
+	# construction reuses stoking loop until built
+	if under_construction:
+		return true
 	return wood_stock < max_wood and fuel_time < float(max_wood) * fuel_seconds_per_wood
 
 
@@ -139,10 +204,14 @@ func add_wood(amount: int = 1) -> int:
 
 # --- WorkSite ---
 func can_accept_work(worker: Node = null) -> bool:
+	if under_construction:
+		if worker != null and "data" in worker and worker.data:
+			var item := str(worker.data.carried_item).to_lower()
+			return worker.data.item_amount > 0 and (item == "wood" or item == "log")
+		return true
 	if not needs_fuel():
 		return false
 	if worker != null and "data" in worker and worker.data:
-		# только wood в руках
 		var item := str(worker.data.carried_item).to_lower()
 		return worker.data.item_amount > 0 and (item == "wood" or item == "log")
 	return true
@@ -153,10 +222,14 @@ func get_work_skill() -> String:
 
 
 func get_work_type() -> String:
+	if under_construction:
+		return "building"
 	return work_type
 
 
 func get_work_anim() -> String:
+	if under_construction:
+		return "work"
 	return work_anim
 
 
@@ -172,6 +245,25 @@ func do_work(worker: Node = null) -> Dictionary:
 	var item := str(worker.data.carried_item).to_lower()
 	if item != "wood" and item != "log":
 		return {"ok": false, "reason": "not_wood"}
+	# --- construction: wood as materials ---
+	if under_construction:
+		var take_n: int = 1
+		worker.data.item_amount -= take_n
+		if worker.data.item_amount <= 0:
+			worker.data.carried_item = ""
+			worker.data.item_amount = 0
+		_build_wood_used += take_n
+		var chunk: float = build_time / float(maxi(build_wood_needed, 1))
+		contribute_build(chunk)
+		return {
+			"ok": true,
+			"take": {"item": "wood", "amount": take_n},
+			"xp_skill": skill,
+			"work_type": "building",
+			"work_anim": "work",
+			"build_progress": build_progress,
+			"under_construction": under_construction,
+		}
 	if not needs_fuel():
 		return {"ok": false, "reason": "full"}
 	var amount: int = worker.data.item_amount
