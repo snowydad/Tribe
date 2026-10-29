@@ -92,8 +92,8 @@ func _update_text() -> void:
 		time_str = _format_game_duration()
 
 	# line1 resources, line2 time/fps
-	_label.text = "Pop:%d  Food:%d  Wood:%d  Stone:%d  RP:%.0f\nFPS:%d  %s / %s" % [
-		pop, food, wood, stone, rp, fps, year_month, time_str
+	_label.text = "FPS:%d  %s / %s\nPop:%d  Food:%d  Wood:%d  Stone:%d  RP:%.0f" % [
+		fps, year_month, time_str, pop, food, wood, stone, rp
 	]
 	if fps < 30:
 		_label.modulate = Color(1.0, 0.35, 0.35)
