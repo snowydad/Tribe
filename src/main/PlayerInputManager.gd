@@ -1,6 +1,6 @@
 # ==============================================================================
 # PlayerInputManager.gd — ввод: тык = select/инфо, hold/сдвиг = drag
-# ОБНОВЛЕНО: 2026-10-28 — select character OR worksite + object ring
+# ОБНОВЛЕНО: 2026-10-30 — edge scroll while dragging character
 # ==============================================================================
 extends Node3D
 
@@ -14,6 +14,10 @@ signal selection_changed(node)  # Character or worksite or null
 @export var hold_to_drag_sec: float = 0.28
 @export var drag_height_offset: float = 2.0
 @export var lift_speed: float = 12.0
+## px от края экрана → edge scroll при drag перса
+@export var edge_scroll_margin: float = 56.0
+## скорость пана камеры у края (м/с, full strength)
+@export var edge_scroll_speed: float = 22.0
 
 var selected_character: CharacterBody3D = null
 var selected_object: Node3D = null
@@ -34,6 +38,7 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	_update_object_ring()
 	if is_dragging_character and selected_character:
+		_update_edge_scroll(delta)
 		_update_drag_position(delta)
 		return
 
@@ -345,14 +350,76 @@ func _update_drag_position(delta: float) -> void:
 		selected_character.global_position = selected_character.global_position.lerp(target_air_pos, lift_speed * delta)
 
 
+
+## drag перса + курсор у края → пан CameraAnchor
+func _update_edge_scroll(delta: float) -> void:
+	if edge_scroll_margin <= 0.0 or edge_scroll_speed <= 0.0:
+		return
+	var vp := get_viewport()
+	if vp == null:
+		return
+	var size: Vector2 = vp.get_visible_rect().size
+	if size.x < 1.0 or size.y < 1.0:
+		return
+	var m: Vector2 = vp.get_mouse_position()
+	var margin: float = edge_scroll_margin
+	var sx: float = 0.0
+	var sy: float = 0.0
+	if m.x < margin:
+		sx = -clampf(1.0 - m.x / margin, 0.0, 1.0)
+	elif m.x > size.x - margin:
+		sx = clampf(1.0 - (size.x - m.x) / margin, 0.0, 1.0)
+	# screen Y: top of screen → pan forward (into map), bottom → reverse
+	if m.y < margin:
+		sy = clampf(1.0 - m.y / margin, 0.0, 1.0)
+	elif m.y > size.y - margin:
+		sy = -clampf(1.0 - (size.y - m.y) / margin, 0.0, 1.0)
+	if absf(sx) < 0.001 and absf(sy) < 0.001:
+		return
+	if not camera:
+		camera = vp.get_camera_3d()
+	if not camera:
+		return
+	var basis := camera.global_transform.basis
+	var right := Vector3(basis.x.x, 0.0, basis.x.z)
+	if right.length_squared() < 0.0001:
+		right = Vector3.RIGHT
+	else:
+		right = right.normalized()
+	var forward := Vector3(-basis.z.x, 0.0, -basis.z.z)
+	if forward.length_squared() < 0.0001:
+		forward = Vector3.FORWARD
+	else:
+		forward = forward.normalized()
+	var move: Vector3 = (right * sx + forward * sy) * edge_scroll_speed * delta
+	var ctrl: Node = _get_camera_controller()
+	var anchor: Node3D = ctrl as Node3D if ctrl is Node3D else null
+	if anchor == null and camera.get_parent() and camera.get_parent().get_parent() is Node3D:
+		anchor = camera.get_parent().get_parent() as Node3D
+	if anchor == null:
+		return
+	var target: Vector3 = anchor.global_position + move
+	if ctrl != null and "bounds_min" in ctrl and "bounds_max" in ctrl:
+		var bmin: Vector2 = ctrl.get("bounds_min")
+		var bmax: Vector2 = ctrl.get("bounds_max")
+		target.x = clampf(target.x, bmin.x, bmax.x)
+		target.z = clampf(target.z, bmin.y, bmax.y)
+	anchor.global_position = target
+	if ctrl != null and ctrl.has_method("_snap_to_terrain_height"):
+		ctrl.call("_snap_to_terrain_height", clampf(delta * 8.0, 0.0, 1.0))
+
+
 func _get_camera_controller() -> Node:
 	if not camera:
 		return null
-	if camera.has_method("cancel_drag") or "is_locked" in camera:
-		return camera
-	var parent = camera.get_parent()
-	if parent and (parent.has_method("cancel_drag") or "is_locked" in parent):
-		return parent
+	var n: Node = camera
+	# Camera3D → SpringArm → CameraAnchor (camera_3d.gd)
+	for _i in range(6):
+		if n == null:
+			break
+		if n.has_method("cancel_drag") or "is_locked" in n:
+			return n
+		n = n.get_parent()
 	return null
 
 

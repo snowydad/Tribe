@@ -184,6 +184,13 @@ func _update_visuals() -> void:
 		mesh.scale = Vector3(t, t, t)
 
 
+
+func get_display_name() -> String:
+	if Loc and Loc.has_method("object_name"):
+		return Loc.object_name("debris")
+	return "Debris"
+
+
 func get_info_text() -> String:
 	if has_method("_update_dev_ui"):
 		_update_dev_ui()

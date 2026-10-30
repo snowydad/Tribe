@@ -1,0 +1,7 @@
+id,comment,ru,en
+OBJ_CAMPFIRE,campfire,Костёр,Campfire
+OBJ_SHELTER,shelter,Шалаш,Shelter
+OBJ_STORAGE,storage stocks,Склад,Stocks
+OBJ_BERRIES,berry bush,Куст ягод,Berry bush
+OBJ_DEBRIS,wood debris,Завал,Debris
+OBJ_UNKNOWN,fallback,Объект,Object

@@ -321,6 +321,13 @@ func release_work_point(requester: Node3D) -> void:
 		_occupied_slots.erase(requester.get_instance_id())
 
 
+
+func get_display_name() -> String:
+	if Loc and Loc.has_method("object_name"):
+		return Loc.object_name("campfire")
+	return "Campfire"
+
+
 func get_info_text() -> String:
 	if under_construction:
 		var pct := 0 if build_time <= 0.0 else int(100.0 * build_progress / build_time)

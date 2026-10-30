@@ -278,6 +278,13 @@ func _cleanup_dict(slots: Dictionary) -> void:
 		slots.erase(rid)
 
 
+
+func get_display_name() -> String:
+	if Loc and Loc.has_method("object_name"):
+		return Loc.object_name("shelter")
+	return "Shelter"
+
+
 func get_info_text() -> String:
 	if not is_built:
 		return "BUILDING\nshelter\nmat %d/%d" % [_build_wood_used, build_wood_needed]

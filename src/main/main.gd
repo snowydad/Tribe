@@ -123,8 +123,18 @@ func _on_placement_confirmed(tech_id: String, world_pos: Vector3) -> void:
 		inst.set("is_built", false)
 	add_child(inst)
 	inst.global_position = world_pos
+	_apply_built_object_name(inst, tech_id)
 
 
 func _on_research_pressed() -> void:
 	if _tech_panel and _tech_panel.has_method("toggle"):
 		_tech_panel.call("toggle")
+
+
+func _apply_built_object_name(inst: Node, tech_id: String) -> void:
+	var base := tech_id.capitalize()
+	if Loc and Loc.has_method("object_name"):
+		base = Loc.object_name(tech_id)
+	# Godot-safe unique name (no spaces for node path ease — keep spaces ok in 4.x)
+	var safe := base.replace(" ", "_")
+	inst.name = safe

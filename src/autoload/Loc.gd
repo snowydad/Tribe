@@ -1,7 +1,7 @@
 # ==============================================================================
 # Loc.gd — строки UI: ui_character.csv (+ позже ui.csv). Locale = OS, потом settings.
 # Формат csv: id,comment,ru,en  (как names.csv)
-# ОБНОВЛЕНО: 2026-10-19
+# ОБНОВЛЕНО: 2026-10-30 — objects.csv
 # ==============================================================================
 extends Node
 
@@ -15,6 +15,7 @@ var _tables: Dictionary = {}
 func _ready() -> void:
 	_detect_system_locale()
 	load_character_strings()
+	load_object_strings()
 	print("[Loc] locale=%s tables=%s" % [locale, str(_tables.keys())])
 
 
@@ -41,6 +42,27 @@ func set_locale(code: String) -> void:
 
 func load_character_strings() -> void:
 	_load_csv("res://assets/strings/ui_character.csv", "ui_character")
+
+
+func load_object_strings() -> void:
+	_load_csv("res://assets/strings/objects.csv", "objects")
+
+
+## имя объекта: OBJ_CAMPFIRE / campfire / shelter → локализовано
+func object_name(key: String) -> String:
+	var k := str(key).strip_edges()
+	if k == "":
+		return t("OBJ_UNKNOWN", {}, "objects")
+	var id := k
+	if not id.begins_with("OBJ_"):
+		id = "OBJ_%s" % k.to_upper()
+	var s := t(id, {}, "objects")
+	# t returns id if missing — try raw key
+	if s == id:
+		s = t(k, {}, "objects")
+	if s == k or s == id:
+		return k.capitalize().replace("_", " ")
+	return s
 
 
 func _load_csv(path: String, table_key: String) -> void:

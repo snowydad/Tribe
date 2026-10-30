@@ -326,6 +326,13 @@ func _cleanup_slots() -> void:
 		_occupied_slots.erase(req_id)
 
 
+
+func get_display_name() -> String:
+	if Loc and Loc.has_method("object_name"):
+		return Loc.object_name("storage")
+	return "Storage"
+
+
 func get_info_text() -> String:
 	if has_method("_update_dev_ui"):
 		_update_dev_ui()

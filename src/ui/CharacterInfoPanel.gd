@@ -110,6 +110,14 @@ func _format_selection_block() -> String:
 
 func _format_object_block(n: Node) -> String:
 	var title := str(n.name)
+	if n.has_method("get_display_name"):
+		title = str(n.call("get_display_name"))
+	elif Loc and Loc.has_method("object_name"):
+		# fallback: group / class hint
+		for g in ["campfire", "shelter", "storage", "berries", "debris"]:
+			if n.is_in_group(g):
+				title = Loc.object_name(g)
+				break
 	var body := ""
 	if n.has_method("get_info_text"):
 		body = str(n.call("get_info_text"))

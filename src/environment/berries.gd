@@ -440,6 +440,13 @@ func _find_next_free_slot_index() -> int:
 	return candidate
 
 
+
+func get_display_name() -> String:
+	if Loc and Loc.has_method("object_name"):
+		return Loc.object_name("berries")
+	return "Berries"
+
+
 func get_info_text() -> String:
 	if has_method("_update_dev_ui"):
 		_update_dev_ui()
