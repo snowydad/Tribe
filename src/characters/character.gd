@@ -1,6 +1,6 @@
 # ==============================================================================
 # character.gd — FSM, work, drop. HOW-nav → CharacterNavigation.
-# ОБНОВЛЕНО: 2026-10-27 — male_00 glb clips idle/walk/eat/die/work
+# ОБНОВЛЕНО: 2026-10-29 — surplus wood after build → storage
 # ==============================================================================
 extends CharacterBody3D
 
@@ -1011,23 +1011,91 @@ func _process_stoking_unload(delta: float) -> void:
 		elif data.has_method("add_skill_exp"):
 			data.add_skill_exp(sk, xp)
 		_award_work_rp()
-	# ещё нужно?
+	elif data and data.item_amount > 0 and str(data.carried_item).to_lower() in ["wood", "log"]:
+		# site rejected (full/built) — сдать излишек
+		if fire.has_method("release_work_point"):
+			fire.release_work_point(self)
+		if decision:
+			decision.want_stoking = false
+			decision.stoking_target = null
+		target_campfire = null
+		_is_unloading_at_storage = false
+		_deliver_surplus_wood()
+		return
+	# ещё нужно топливо/материалы?
 	if fire.has_method("needs_fuel") and fire.needs_fuel():
 		if data.item_amount > 0 and str(data.carried_item).to_lower() in ["wood", "log"]:
 			return  # next cycle same unload
 		start_stoking(fire)
 		return
+	# стройка/топливо закрыто — излишек wood сдать
 	_is_unloading_at_storage = false
 	if decision:
 		decision.want_stoking = false
 		decision.stoking_target = null
-	target_campfire = null
 	if fire.has_method("release_work_point"):
 		fire.release_work_point(self)
+	target_campfire = null
 	if task_manager:
 		task_manager.complete_current_task()
+	if data and data.item_amount > 0 and str(data.carried_item).to_lower() in ["wood", "log"]:
+		_deliver_surplus_wood()
+		return
 	current_state = State.IDLE
 
+
+
+## wood остался после стройки/полной топки → склад (есть место) или другой костёр
+func _deliver_surplus_wood() -> void:
+	if not data or data.item_amount <= 0:
+		current_state = State.IDLE
+		return
+	if str(data.carried_item).to_lower() not in ["wood", "log"]:
+		current_state = State.IDLE
+		return
+	# 1) склад с местом
+	var st := _find_storage_accepting_wood()
+	if st:
+		print("[Character] surplus wood → storage")
+		start_delivering_to_storage(st)
+		return
+	# 2) костёр которому нужно fuel (не «закрытый» сайт)
+	var fire2 := _find_campfire_needing_fuel()
+	if fire2:
+		print("[Character] surplus wood → campfire")
+		start_stoking(fire2)
+		return
+	print("[Character] surplus wood: nowhere to put")
+	current_state = State.IDLE
+
+
+func _find_storage_accepting_wood() -> Node3D:
+	var best: Node3D = null
+	var best_d: float = INF
+	for n in get_tree().get_nodes_in_group("storage"):
+		if not is_instance_valid(n):
+			continue
+		if not WorkSite.can_accept(n, self):
+			continue
+		var d: float = global_position.distance_to(n.global_position)
+		if d < best_d:
+			best_d = d
+			best = n as Node3D
+	return best
+
+
+func _find_campfire_needing_fuel() -> Node3D:
+	var best: Node3D = null
+	var best_d: float = INF
+	for n in get_tree().get_nodes_in_group("campfire"):
+		if not is_instance_valid(n):
+			continue
+		if n.has_method("needs_fuel") and n.needs_fuel():
+			var d: float = global_position.distance_to(n.global_position)
+			if d < best_d:
+				best_d = d
+				best = n as Node3D
+	return best
 
 func _process_clearing(delta: float) -> void:
 	if not target_obstacle or not is_instance_valid(target_obstacle):

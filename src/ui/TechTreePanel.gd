@@ -1,6 +1,6 @@
 # ==============================================================================
 # TechTreePanel.gd — tech UI: start research (RP+prereq) → timer → known
-# ОБНОВЛЕНО: 2026-10-28 — Build button for placeable known tech (step1)
+# ОБНОВЛЕНО: 2026-10-29 — BUILDABLE + shelter
 # ==============================================================================
 extends PanelContainer
 
@@ -8,7 +8,7 @@ extends PanelContainer
 signal build_requested(tech_id: String)
 
 ## known + can place in world
-const BUILDABLE_TECHS: PackedStringArray = ["campfire"]
+const BUILDABLE_TECHS: PackedStringArray = ["campfire", "shelter"]
 
 const MARGIN := 16.0
 const NODE_W := 180.0

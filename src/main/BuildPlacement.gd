@@ -53,24 +53,25 @@ func start(p_tech_id: String) -> void:
 func _load_place_rules(p_tech_id: String) -> void:
 	min_ground_y = 0.0
 	clear_radius = 2.5
-	if p_tech_id != "campfire":
-		return
 	if ConfigLoader == null:
 		push_warning("[BuildPlacement] ConfigLoader missing")
 		return
 	var y_val = null
 	var r_val = null
-	if ConfigLoader.has_method("get_campfire_value"):
-		y_val = ConfigLoader.get_campfire_value("build", "place_min_y", null)
-		r_val = ConfigLoader.get_campfire_value("build", "place_clear_radius", null)
+	var cfg := p_tech_id  # campfire / shelter / …
+	# getters: get_campfire_value / get_shelter_value / get_config_value
+	var getter := "get_%s_value" % cfg
+	if ConfigLoader.has_method(getter):
+		y_val = ConfigLoader.call(getter, "build", "place_min_y", null)
+		r_val = ConfigLoader.call(getter, "build", "place_clear_radius", null)
 	elif ConfigLoader.has_method("get_config_value"):
-		y_val = ConfigLoader.get_config_value("campfire", "build", "place_min_y", null)
-		r_val = ConfigLoader.get_config_value("campfire", "build", "place_clear_radius", null)
+		y_val = ConfigLoader.get_config_value(cfg, "build", "place_min_y", null)
+		r_val = ConfigLoader.get_config_value(cfg, "build", "place_clear_radius", null)
 	if y_val != null:
 		min_ground_y = float(y_val)
 	if r_val != null:
 		clear_radius = float(r_val)
-	print("[BuildPlacement] ini place_min_y=", y_val, " → ", min_ground_y, " clear=", r_val, " → ", clear_radius)
+	print("[BuildPlacement] ", cfg, " min_y=", min_ground_y, " clear=", clear_radius)
 
 
 func cancel() -> void:

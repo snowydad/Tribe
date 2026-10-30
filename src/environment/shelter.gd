@@ -1,7 +1,7 @@
 # ==============================================================================
 # shelter.gd — шалаш (базовое жильё). v1: уже «известен», без крафта.
 # Слоты сна (SleepPoints) + WorkPoints. Стройка — задел на потом.
-# ОБНОВЛЕНО: 2026-10-17
+# ОБНОВЛЕНО: 2026-10-29 — visual BUILDING (step4)
 # ==============================================================================
 extends Node3D
 class_name ShelterSite
@@ -12,8 +12,11 @@ class_name ShelterSite
 @export var work_type: String = "building"
 @export var skill: String = "builder"
 @export var work_anim: String = "build"
-## v1: базовое знание — сразу пригоден для сна
+## false while player-placed under construction
 @export var is_built: bool = true
+var _placed_as_construction: bool = false
+var _build_wood_used: int = 0
+var build_wood_needed: int = 5
 
 var _bed_slots: Dictionary = {}  # requester_id -> bed index
 var _work_slots: Dictionary = {}
@@ -28,7 +31,22 @@ func _ready() -> void:
 	add_to_group("interactable")
 	add_to_group(WorkSite.GROUP)
 	_load_config()
+	# Build place: ignore starts_built from ini
+	if _placed_as_construction:
+		is_built = false
+		_build_wood_used = 0
+	if ConfigLoader and ConfigLoader.has_method("get_shelter_value"):
+		build_wood_needed = int(ConfigLoader.get_shelter_value("build", "build_wood_needed", wood_required))
+	build_wood_needed = maxi(build_wood_needed, 1)
+	wood_required = build_wood_needed
 	_update_dev_ui()
+
+
+## call before add_child
+func setup_as_construction() -> void:
+	_placed_as_construction = true
+	is_built = false
+	_build_wood_used = 0
 
 
 func _load_config() -> void:
@@ -47,10 +65,17 @@ func _load_config() -> void:
 
 
 # --- WorkSite (стройка — задел; v1 can_accept false если built) ---
+## alias for character start_stoking / wood haul path
+func needs_fuel() -> bool:
+	return not is_built
+
+
 func can_accept_work(worker: Node = null) -> bool:
-	# v1: уже построен — строить нечего; later: !is_built + wood
 	if is_built:
 		return false
+	if worker != null and "data" in worker and worker.data:
+		var item := str(worker.data.carried_item).to_lower()
+		return worker.data.item_amount > 0 and (item == "wood" or item == "log")
 	return true
 
 
@@ -70,16 +95,36 @@ func get_work_anim() -> String:
 	return work_anim
 
 
-func do_work(worker: Node) -> Dictionary:
+func do_work(worker: Node = null) -> Dictionary:
 	if is_built:
 		return {"ok": false, "reason": "already_built"}
-	# задел: один цикл → built (без списания wood пока)
-	is_built = true
+	if worker == null or not ("data" in worker) or worker.data == null:
+		return {"ok": false, "reason": "no_worker"}
+	if worker.data.item_amount <= 0:
+		return {"ok": false, "reason": "empty_hands"}
+	var item := str(worker.data.carried_item).to_lower()
+	if item != "wood" and item != "log":
+		return {"ok": false, "reason": "not_wood"}
+	var take_n: int = 1
+	worker.data.item_amount -= take_n
+	if worker.data.item_amount <= 0:
+		worker.data.carried_item = ""
+		worker.data.item_amount = 0
+	_build_wood_used += take_n
+	if _build_wood_used >= build_wood_needed:
+		is_built = true
+		_placed_as_construction = false
+		print("[Shelter] construction complete wood=%d" % _build_wood_used)
 	_update_dev_ui()
 	return {
 		"ok": true,
+		"take": {"item": "wood", "amount": take_n},
 		"xp_skill": skill,
-		"built": true,
+		"work_type": "building",
+		"work_anim": work_anim,
+		"built": is_built,
+		"build_wood": _build_wood_used,
+		"build_need": build_wood_needed,
 	}
 
 
@@ -234,24 +279,53 @@ func _cleanup_dict(slots: Dictionary) -> void:
 
 
 func get_info_text() -> String:
-	if has_method("_update_dev_ui"):
-		_update_dev_ui()
-	var dl = get_node_or_null("DevLabel") as Label3D
-	if dl != null and str(dl.text).strip_edges() != "":
-		return str(dl.text)
-	return name
-
+	if not is_built:
+		return "BUILDING\nshelter\nmat %d/%d" % [_build_wood_used, build_wood_needed]
+	return "Shelter\nbeds:%d / %d\nbuilt" % [_bed_slots.size(), bed_capacity]
 
 func _update_dev_ui() -> void:
-	if dev_label == null:
+	if not dev_label:
+		dev_label = get_node_or_null("DevLabel") as Label3D
+	if not dev_label:
 		return
-	dev_label.text = "Shelter\n%s\nbeds %d/%d" % [
-		"built" if is_built else "frame",
-		_bed_slots.size(),
-		bed_capacity,
-	]
-
+	var show_dev := true
+	if DevCheatManager and DevCheatManager.has_method("is_dev_overlays_on"):
+		show_dev = DevCheatManager.is_dev_overlays_on()
+	dev_label.visible = show_dev
+	if not is_built:
+		dev_label.text = "BUILDING\nmat %d/%d" % [_build_wood_used, build_wood_needed]
+	else:
+		dev_label.text = "Shelter\nbeds %d/%d" % [_bed_slots.size(), bed_capacity]
+	_apply_construction_visual()
 
 func _process(_delta: float) -> void:
 	if Engine.get_frames_drawn() % 30 == 0:
 		_update_dev_ui()
+
+## каркас: прозрачный + зелёный прогресс по mat
+func _apply_construction_visual() -> void:
+	var meshes: Array = []
+	for n in get_children():
+		if n is MeshInstance3D:
+			meshes.append(n)
+	var progress: float = 1.0
+	if not is_built and build_wood_needed > 0:
+		progress = clampf(float(_build_wood_used) / float(build_wood_needed), 0.0, 1.0)
+	for mi in meshes:
+		var m: MeshInstance3D = mi as MeshInstance3D
+		if m == null:
+			continue
+		# material override per mesh
+		var mat: StandardMaterial3D = m.get_surface_override_material(0) as StandardMaterial3D
+		if mat == null:
+			mat = StandardMaterial3D.new()
+			m.set_surface_override_material(0, mat)
+		if not is_built:
+			mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+			mat.albedo_color = Color(0.35, 0.85, 0.4, 0.25 + 0.55 * progress)
+			# каркас растёт
+			m.scale = Vector3.ONE * (0.55 + 0.45 * progress)
+		else:
+			mat.transparency = BaseMaterial3D.TRANSPARENCY_DISABLED
+			mat.albedo_color = Color(1, 1, 1, 1)
+			m.scale = Vector3.ONE

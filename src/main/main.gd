@@ -1,6 +1,6 @@
 # ==============================================================================
 # ФАЙЛ: src/main/main.gd
-# ОБНОВЛЕНО: 2026-10-28 — Build place + spawn campfire
+# ОБНОВЛЕНО: 2026-10-29 — place campfire + shelter (step1)
 # ==============================================================================
 extends Node3D
 
@@ -8,6 +8,7 @@ const TechTreePanelScript = preload("res://src/ui/TechTreePanel.gd")
 const ResourcesPanelScript = preload("res://src/ui/ResourcesPanel.gd")
 const BuildPlacementScript = preload("res://src/main/BuildPlacement.gd")
 const CampfireScene = preload("res://src/environment/campfire.tscn")
+const ShelterScene = preload("res://src/environment/shelter.tscn")
 
 @onready var player_input: Node3D = $PlayerInputManager
 @onready var camera_anchor: Node3D = $CameraAnchor
@@ -102,18 +103,26 @@ func _on_build_requested(tech_id: String) -> void:
 
 func _on_placement_confirmed(tech_id: String, world_pos: Vector3) -> void:
 	print("[Main] place ", tech_id, " at ", world_pos)
-	if tech_id != "campfire":
-		push_warning("[Main] unknown build tech: " + tech_id)
+	var scene: PackedScene = null
+	match tech_id:
+		"campfire":
+			scene = CampfireScene
+		"shelter":
+			scene = ShelterScene
+		_:
+			push_warning("[Main] unknown build tech: " + tech_id)
+			return
+	var inst: Node3D = scene.instantiate() as Node3D
+	if inst == null:
 		return
-	var cf: Node3D = CampfireScene.instantiate() as Node3D
-	if cf == null:
-		return
-	if cf.has_method("setup_as_construction"):
-		cf.call("setup_as_construction")
-	else:
-		cf.set("under_construction", true)
-	add_child(cf)
-	cf.global_position = world_pos
+	if inst.has_method("setup_as_construction"):
+		inst.call("setup_as_construction")
+	elif "under_construction" in inst:
+		inst.set("under_construction", true)
+	elif "is_built" in inst:
+		inst.set("is_built", false)
+	add_child(inst)
+	inst.global_position = world_pos
 
 
 func _on_research_pressed() -> void:
